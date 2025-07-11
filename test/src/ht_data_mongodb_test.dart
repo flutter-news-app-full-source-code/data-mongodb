@@ -527,6 +527,68 @@ void main() {
           containsPair('orderby', {'price': 1, '_id': -1}),
         );
       });
+
+      group('pagination', () {
+        test(
+            'should return paginated response with hasMore true when more items exist',
+            () async {
+          // Arrange
+          final productDocs = createProductDocs(5); // 5 items in DB
+          setupMockFind(productDocs);
+          const pagination = PaginationOptions(limit: 3);
+
+          // Act
+          final response = await client.readAll(pagination: pagination);
+
+          // Assert
+          expect(response.data.items.length, 3);
+          expect(response.data.hasMore, isTrue);
+          expect(response.data.cursor, isNotNull);
+          expect(
+            response.data.cursor,
+            (productDocs[2]['_id']! as ObjectId).oid,
+          );
+
+          final captured =
+              verify(() => mockCollection.find(captureAny())).captured.first;
+          final builder = captured as SelectorBuilder;
+          expect(builder.paramLimit, 4); // limit (3) + 1
+        });
+
+        test(
+            'should return paginated response with hasMore false when items match limit',
+            () async {
+          // Arrange
+          final productDocs = createProductDocs(3); // 3 items in DB
+          setupMockFind(productDocs);
+          const pagination = PaginationOptions(limit: 3);
+
+          // Act
+          final response = await client.readAll(pagination: pagination);
+
+          // Assert
+          expect(response.data.items.length, 3);
+          expect(response.data.hasMore, isFalse);
+          expect(response.data.cursor, isNull);
+        });
+
+        test(
+            'should return paginated response with hasMore false when items are less than limit',
+            () async {
+          // Arrange
+          final productDocs = createProductDocs(2); // 2 items in DB
+          setupMockFind(productDocs);
+          const pagination = PaginationOptions(limit: 3);
+
+          // Act
+          final response = await client.readAll(pagination: pagination);
+
+          // Assert
+          expect(response.data.items.length, 2);
+          expect(response.data.hasMore, isFalse);
+          expect(response.data.cursor, isNull);
+        });
+      });
     });
   });
 }
