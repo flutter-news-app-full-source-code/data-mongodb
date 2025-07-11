@@ -96,9 +96,42 @@ class HtDataMongodb<T> implements HtDataClient<T> {
   }
 
   @override
-  Future<SuccessApiResponse<T>> read({required String id, String? userId}) {
-    // TODO: implement read
-    throw UnimplementedError();
+  Future<SuccessApiResponse<T>> read({
+    required String id,
+    String? userId,
+  }) async {
+    _logger.fine('Reading item with id: $id from $_modelName, userId: $userId');
+    try {
+      // Validate that the ID is a valid ObjectId hex string before querying.
+      if (!ObjectId.isValidHexId(id)) {
+        throw BadRequestException('Invalid ID format: "$id"');
+      }
+
+      final selector = <String, dynamic>{
+        '_id': ObjectId.fromHexString(id),
+      };
+
+      if (userId != null) {
+        selector['userId'] = userId;
+      }
+
+      final doc = await _collection.findOne(selector);
+
+      if (doc == null) {
+        _logger.warning(
+          'Read FAILED: Item with id "$id" not found in $_modelName for userId: $userId',
+        );
+        throw NotFoundException(
+          'Item with ID "$id" not found in $_modelName.',
+        );
+      }
+
+      final item = _mapMongoDocumentToModel(doc);
+      return SuccessApiResponse(data: item, metadata: ResponseMetadata.now());
+    } on MongoDartError catch (e, s) {
+      _logger.severe('MongoDartError during read', e, s);
+      throw ServerException('Database error during read: ${e.message}');
+    }
   }
 
   @override
