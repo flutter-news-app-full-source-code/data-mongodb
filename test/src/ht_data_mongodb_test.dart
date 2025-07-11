@@ -2,7 +2,6 @@
 
 import 'package:equatable/equatable.dart';
 import 'package:ht_data_mongodb/ht_data_mongodb.dart';
-import 'package:ht_data_mongodb/src/mongo_db_connection_manager.dart';
 import 'package:ht_shared/ht_shared.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:mongo_dart/mongo_dart.dart';
@@ -224,8 +223,9 @@ void main() {
 
       test('should throw ServerException on database error', () {
         // Arrange
-        when(() => mockCollection.findOne(any()))
-            .thenThrow(Exception('DB connection failed'));
+        when(
+          () => mockCollection.findOne(any()),
+        ).thenThrow(Exception('DB connection failed'));
 
         // Act & Assert
         expect(
@@ -331,8 +331,9 @@ void main() {
 
       test('should throw ServerException on database error', () {
         // Arrange
-        when(() => mockCollection.replaceOne(any(), any()))
-            .thenThrow(Exception('DB connection failed'));
+        when(
+          () => mockCollection.replaceOne(any(), any()),
+        ).thenThrow(Exception('DB connection failed'));
 
         // Act & Assert
         expect(
@@ -414,8 +415,9 @@ void main() {
 
       test('should throw ServerException on database error', () {
         // Arrange
-        when(() => mockCollection.deleteOne(any()))
-            .thenThrow(Exception('DB connection failed'));
+        when(
+          () => mockCollection.deleteOne(any()),
+        ).thenThrow(Exception('DB connection failed'));
 
         // Act & Assert
         expect(

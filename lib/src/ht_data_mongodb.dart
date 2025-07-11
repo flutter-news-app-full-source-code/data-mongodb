@@ -19,11 +19,11 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     required FromJson<T> fromJson,
     required ToJson<T> toJson,
     Logger? logger,
-  })  : _connectionManager = connectionManager,
-        _modelName = modelName,
-        _fromJson = fromJson,
-        _toJson = toJson,
-        _logger = logger ?? Logger('HtDataMongodb<$T>');
+  }) : _connectionManager = connectionManager,
+       _modelName = modelName,
+       _fromJson = fromJson,
+       _toJson = toJson,
+       _logger = logger ?? Logger('HtDataMongodb<$T>');
 
   final MongoDbConnectionManager _connectionManager;
   final String _modelName;
