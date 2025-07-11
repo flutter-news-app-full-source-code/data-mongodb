@@ -220,6 +220,8 @@ class HtDataMongodb<T> implements HtDataClient<T> {
         );
       }
       // No return value on success
+    } on HtHttpException {
+      rethrow;
     } on Exception catch (e, s) {
       _logger.severe('MongoDartError during delete', e, s);
       throw ServerException('Database error during delete: $e');
@@ -266,6 +268,8 @@ class HtDataMongodb<T> implements HtDataClient<T> {
           timestamp: DateTime.now(),
         ),
       );
+    } on HtHttpException {
+      rethrow;
     } on Exception catch (e, s) {
       _logger.severe('MongoDartError during read', e, s);
       throw ServerException('Database error during read: $e');
@@ -327,6 +331,8 @@ class HtDataMongodb<T> implements HtDataClient<T> {
           timestamp: DateTime.now(),
         ),
       );
+    } on HtHttpException {
+      rethrow;
     } on Exception catch (e, s) {
       _logger.severe('MongoDartError during readAll', e, s);
       throw ServerException('Database error during readAll: $e');
@@ -379,6 +385,8 @@ class HtDataMongodb<T> implements HtDataClient<T> {
           timestamp: DateTime.now(),
         ),
       );
+    } on HtHttpException {
+      rethrow;
     } on Exception catch (e, s) {
       _logger.severe('MongoDartError during update', e, s);
       throw ServerException('Database error during update: $e');

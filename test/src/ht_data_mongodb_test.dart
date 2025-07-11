@@ -634,8 +634,11 @@ void main() {
           verify(
             () => mockCollection.findOne(
               any(
-                that: isA<SelectorBuilder>()
-                    .having((s) => s.map, 'map', {'_id': cursorId}),
+                that: isA<SelectorBuilder>().having(
+                  (s) => s.map,
+                  'map',
+                  {r'$query': {'_id': cursorId}},
+                ),
               ),
             ),
           ).called(1);
