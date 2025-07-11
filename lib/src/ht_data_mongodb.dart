@@ -168,9 +168,40 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     Map<String, dynamic>? filter,
     PaginationOptions? pagination,
     List<SortOption>? sort,
-  }) {
-    // TODO: implement readAll
-    throw UnimplementedError();
+  }) async {
+    _logger.fine(
+      'Reading all from $_modelName with filter: $filter, pagination: '
+      '$pagination, sort: $sort, userId: $userId',
+    );
+    try {
+      // This structure sets up the flow for the next steps.
+      // The logic for selector, sorting, and pagination will be built out.
+
+      // Step 3.2: Build the query selector (to be implemented).
+      final selector = <String, dynamic>{};
+
+      // Step 3.3: Build the sort builder (to be implemented).
+      final sortBuilder = <String, dynamic>{};
+
+      // Step 3.4: Handle pagination and execute query (to be implemented).
+      final items = <T>[];
+      const hasMore = false;
+      const String? cursor = null;
+
+      final paginatedResponse = PaginatedResponse(
+        items: items,
+        cursor: cursor,
+        hasMore: hasMore,
+      );
+
+      return SuccessApiResponse(
+        data: paginatedResponse,
+        metadata: ResponseMetadata.now(),
+      );
+    } on MongoDartError catch (e, s) {
+      _logger.severe('MongoDartError during readAll', e, s);
+      throw ServerException('Database error during readAll: ${e.message}');
+    }
   }
 
   @override
