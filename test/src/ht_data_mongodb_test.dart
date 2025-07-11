@@ -352,5 +352,55 @@ void main() {
             throwsA(isA<NotFoundException>()));
       });
     });
+
+    group('readAll', () {
+      // Helper to create a list of product documents for mocking.
+      List<Map<String, dynamic>> createProductDocs(int count) {
+        return List.generate(count, (i) {
+          final id = ObjectId();
+          return {
+            '_id': id,
+            'name': 'Product $i',
+            'price': 10.0 + i,
+          };
+        });
+      }
+
+      // Helper to set up the mock for the find operation.
+      void setupMockFind(List<Map<String, dynamic>> docs) {
+        // The `find` method returns a stream-like object. We mock it to return
+        // a stream created from our list of mock documents.
+        when(() => mockCollection.find(any()))
+            .thenAnswer((_) => Stream.fromIterable(docs));
+      }
+
+      test('should return all items when no parameters are provided', () async {
+        // Arrange
+        final productDocs = createProductDocs(3);
+        setupMockFind(productDocs);
+
+        // Act
+        final response = await client.readAll();
+
+        // Assert
+        expect(response.data.items.length, 3);
+        expect(response.data.hasMore, isFalse);
+        expect(response.data.cursor, isNull);
+        expect(response.data.items[0].name, 'Product 0');
+        expect(response.data.items[1].name, 'Product 1');
+        expect(response.data.items[2].name, 'Product 2');
+
+        // Verify that the correct SelectorBuilder was passed to find().
+        final captured =
+            verify(() => mockCollection.find(captureAny())).captured.first;
+        expect(captured, isA<SelectorBuilder>());
+
+        final builder = captured as SelectorBuilder;
+        // Check that the default sort order by _id is applied.
+        expect(builder.map, containsPair('orderby', {'_id': 1}));
+        // Check that the limit is the default (20) + 1 for hasMore check.
+        expect(builder.paramLimit, 21);
+      });
+    });
   });
 }
