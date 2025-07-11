@@ -668,6 +668,24 @@ void main() {
           );
           verifyNever(() => mockCollection.findOne(any()));
         });
+
+        test('should throw BadRequestException if cursor doc is not found',
+            () async {
+          // Arrange
+          final validButNotFoundCursor = ObjectId().oid;
+          final pagination = PaginationOptions(cursor: validButNotFoundCursor);
+
+          // Mock findOne to return null, simulating a not-found cursor doc
+          when(() => mockCollection.findOne(any()))
+              .thenAnswer((_) async => null);
+
+          // Act & Assert
+          expect(
+            () => client.readAll(pagination: pagination),
+            throwsA(isA<BadRequestException>()),
+          );
+          verify(() => mockCollection.findOne(any())).called(1);
+        });
       });
     });
   });
