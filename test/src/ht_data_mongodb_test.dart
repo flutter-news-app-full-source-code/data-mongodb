@@ -1,3 +1,5 @@
+// ignore_for_file: inference_failure_on_function_invocation, use_raw_strings, avoid_redundant_argument_values
+
 import 'package:equatable/equatable.dart';
 import 'package:ht_data_mongodb/ht_data_mongodb.dart';
 import 'package:ht_data_mongodb/src/mongo_db_connection_manager.dart';
@@ -85,8 +87,9 @@ void main() {
         final writeResult = MockWriteResult();
         when(() => writeResult.isSuccess).thenReturn(true);
         when(() => writeResult.document).thenReturn(createdDoc);
-        when(() => mockCollection.insertOne(any()))
-            .thenAnswer((_) async => writeResult);
+        when(
+          () => mockCollection.insertOne(any()),
+        ).thenAnswer((_) async => writeResult);
 
         // Act
         final response = await client.create(item: newProduct);
@@ -105,22 +108,23 @@ void main() {
         final writeResult = MockWriteResult();
         when(() => writeResult.isSuccess).thenReturn(true);
         when(() => writeResult.document).thenReturn(createdDocWithUser);
-        when(() => mockCollection.insertOne(any()))
-            .thenAnswer((_) async => writeResult);
+        when(
+          () => mockCollection.insertOne(any()),
+        ).thenAnswer((_) async => writeResult);
 
         // Act
         final response = await client.create(item: newProduct, userId: userId);
 
         // Assert
         expect(response.data, newProduct);
-        verify(() => mockCollection.insertOne(newProductDocWithUser))
-            .called(1);
+        verify(() => mockCollection.insertOne(newProductDocWithUser)).called(1);
       });
 
       test('should throw ServerException on database error', () async {
         // Arrange
-        when(() => mockCollection.insertOne(any()))
-            .thenThrow(Exception('DB connection failed'));
+        when(
+          () => mockCollection.insertOne(any()),
+        ).thenThrow(Exception('DB connection failed'));
 
         // Act & Assert
         expect(
@@ -134,12 +138,15 @@ void main() {
         final writeResult = MockWriteResult();
         when(() => writeResult.isSuccess).thenReturn(false);
         when(() => writeResult.document).thenReturn(null);
-        when(() => mockCollection.insertOne(any()))
-            .thenAnswer((_) async => writeResult);
+        when(
+          () => mockCollection.insertOne(any()),
+        ).thenAnswer((_) async => writeResult);
 
         // Act & Assert
-        expect(() => client.create(item: newProduct),
-            throwsA(isA<ServerException>()));
+        expect(
+          () => client.create(item: newProduct),
+          throwsA(isA<ServerException>()),
+        );
       });
     });
 
@@ -158,16 +165,18 @@ void main() {
 
       test('should read an item successfully by id', () async {
         // Arrange
-        when(() => mockCollection.findOne(any()))
-            .thenAnswer((_) async => productDoc);
+        when(
+          () => mockCollection.findOne(any()),
+        ).thenAnswer((_) async => productDoc);
 
         // Act
         final response = await client.read(id: productId.oid);
 
         // Assert
         expect(response.data, product);
-        final captured =
-            verify(() => mockCollection.findOne(captureAny())).captured.first;
+        final captured = verify(
+          () => mockCollection.findOne(captureAny()),
+        ).captured.first;
         expect(captured, {'_id': productId});
       });
 
@@ -175,16 +184,18 @@ void main() {
         // Arrange
         const userId = 'user-123';
         final productDocWithUser = {...productDoc, 'userId': userId};
-        when(() => mockCollection.findOne(any()))
-            .thenAnswer((_) async => productDocWithUser);
+        when(
+          () => mockCollection.findOne(any()),
+        ).thenAnswer((_) async => productDocWithUser);
 
         // Act
         final response = await client.read(id: productId.oid, userId: userId);
 
         // Assert
         expect(response.data, product);
-        final captured =
-            verify(() => mockCollection.findOne(captureAny())).captured.first;
+        final captured = verify(
+          () => mockCollection.findOne(captureAny()),
+        ).captured.first;
         expect(captured, {'_id': productId, 'userId': userId});
       });
 
@@ -205,8 +216,22 @@ void main() {
         when(() => mockCollection.findOne(any())).thenAnswer((_) async => null);
 
         // Act & Assert
-        expect(() => client.read(id: productId.oid),
-            throwsA(isA<NotFoundException>()));
+        expect(
+          () => client.read(id: productId.oid),
+          throwsA(isA<NotFoundException>()),
+        );
+      });
+
+      test('should throw ServerException on database error', () {
+        // Arrange
+        when(() => mockCollection.findOne(any()))
+            .thenThrow(Exception('DB connection failed'));
+
+        // Act & Assert
+        expect(
+          () => client.read(id: productId.oid),
+          throwsA(isA<ServerException>()),
+        );
       });
     });
 
@@ -226,18 +251,21 @@ void main() {
         // Arrange
         final writeResult = MockWriteResult();
         when(() => writeResult.nModified).thenReturn(1);
-        when(() => mockCollection.replaceOne(any(), any()))
-            .thenAnswer((_) async => writeResult);
+        when(
+          () => mockCollection.replaceOne(any(), any()),
+        ).thenAnswer((_) async => writeResult);
 
         // Act
-        final response =
-            await client.update(id: productId.oid, item: updatedProduct);
+        final response = await client.update(
+          id: productId.oid,
+          item: updatedProduct,
+        );
 
         // Assert
         expect(response.data, updatedProduct);
-        final captured =
-            verify(() => mockCollection.replaceOne(captureAny(), captureAny()))
-                .captured;
+        final captured = verify(
+          () => mockCollection.replaceOne(captureAny(), captureAny()),
+        ).captured;
         expect(captured[0], {'_id': productId});
         expect(captured[1], updatedProductDoc);
       });
@@ -245,11 +273,15 @@ void main() {
       test('should update a user-scoped item successfully', () async {
         // Arrange
         const userId = 'user-123';
-        final updatedProductDocWithUser = {...updatedProductDoc, 'userId': userId};
+        final updatedProductDocWithUser = {
+          ...updatedProductDoc,
+          'userId': userId,
+        };
         final writeResult = MockWriteResult();
         when(() => writeResult.nModified).thenReturn(1);
-        when(() => mockCollection.replaceOne(any(), any()))
-            .thenAnswer((_) async => writeResult);
+        when(
+          () => mockCollection.replaceOne(any(), any()),
+        ).thenAnswer((_) async => writeResult);
 
         // Act
         final response = await client.update(
@@ -260,9 +292,9 @@ void main() {
 
         // Assert
         expect(response.data, updatedProduct);
-        final captured =
-            verify(() => mockCollection.replaceOne(captureAny(), captureAny()))
-                .captured;
+        final captured = verify(
+          () => mockCollection.replaceOne(captureAny(), captureAny()),
+        ).captured;
         expect(captured[0], {'_id': productId, 'userId': userId});
         expect(captured[1], updatedProductDocWithUser);
       });
@@ -272,22 +304,41 @@ void main() {
         const invalidId = 'not-an-object-id';
 
         // Act & Assert
-        expect(() => client.update(id: invalidId, item: updatedProduct),
-            throwsA(isA<BadRequestException>()));
+        expect(
+          () => client.update(id: invalidId, item: updatedProduct),
+          throwsA(isA<BadRequestException>()),
+        );
         verifyNever(() => mockCollection.replaceOne(any(), any()));
       });
 
-      test('should throw NotFoundException if item to update does not exist',
-          () {
+      test(
+        'should throw NotFoundException if item to update does not exist',
+        () {
+          // Arrange
+          final writeResult = MockWriteResult();
+          when(() => writeResult.nModified).thenReturn(0);
+          when(
+            () => mockCollection.replaceOne(any(), any()),
+          ).thenAnswer((_) async => writeResult);
+
+          // Act & Assert
+          expect(
+            () => client.update(id: productId.oid, item: updatedProduct),
+            throwsA(isA<NotFoundException>()),
+          );
+        },
+      );
+
+      test('should throw ServerException on database error', () {
         // Arrange
-        final writeResult = MockWriteResult();
-        when(() => writeResult.nModified).thenReturn(0);
         when(() => mockCollection.replaceOne(any(), any()))
-            .thenAnswer((_) async => writeResult);
+            .thenThrow(Exception('DB connection failed'));
 
         // Act & Assert
-        expect(() => client.update(id: productId.oid, item: updatedProduct),
-            throwsA(isA<NotFoundException>()));
+        expect(
+          () => client.update(id: productId.oid, item: updatedProduct),
+          throwsA(isA<ServerException>()),
+        );
       });
     });
 
@@ -298,15 +349,17 @@ void main() {
         // Arrange
         final writeResult = MockWriteResult();
         when(() => writeResult.nRemoved).thenReturn(1);
-        when(() => mockCollection.deleteOne(any()))
-            .thenAnswer((_) async => writeResult);
+        when(
+          () => mockCollection.deleteOne(any()),
+        ).thenAnswer((_) async => writeResult);
 
         // Act
         await client.delete(id: productId.oid);
 
         // Assert
-        final captured =
-            verify(() => mockCollection.deleteOne(captureAny())).captured.first;
+        final captured = verify(
+          () => mockCollection.deleteOne(captureAny()),
+        ).captured.first;
         expect(captured, {'_id': productId});
       });
 
@@ -315,15 +368,17 @@ void main() {
         const userId = 'user-123';
         final writeResult = MockWriteResult();
         when(() => writeResult.nRemoved).thenReturn(1);
-        when(() => mockCollection.deleteOne(any()))
-            .thenAnswer((_) async => writeResult);
+        when(
+          () => mockCollection.deleteOne(any()),
+        ).thenAnswer((_) async => writeResult);
 
         // Act
         await client.delete(id: productId.oid, userId: userId);
 
         // Assert
-        final captured =
-            verify(() => mockCollection.deleteOne(captureAny())).captured.first;
+        final captured = verify(
+          () => mockCollection.deleteOne(captureAny()),
+        ).captured.first;
         expect(captured, {'_id': productId, 'userId': userId});
       });
 
@@ -339,17 +394,34 @@ void main() {
         verifyNever(() => mockCollection.deleteOne(any()));
       });
 
-      test('should throw NotFoundException if item to delete does not exist',
-          () {
+      test(
+        'should throw NotFoundException if item to delete does not exist',
+        () {
+          // Arrange
+          final writeResult = MockWriteResult();
+          when(() => writeResult.nRemoved).thenReturn(0);
+          when(
+            () => mockCollection.deleteOne(any()),
+          ).thenAnswer((_) async => writeResult);
+
+          // Act & Assert
+          expect(
+            () => client.delete(id: productId.oid),
+            throwsA(isA<NotFoundException>()),
+          );
+        },
+      );
+
+      test('should throw ServerException on database error', () {
         // Arrange
-        final writeResult = MockWriteResult();
-        when(() => writeResult.nRemoved).thenReturn(0);
         when(() => mockCollection.deleteOne(any()))
-            .thenAnswer((_) async => writeResult);
+            .thenThrow(Exception('DB connection failed'));
 
         // Act & Assert
-        expect(() => client.delete(id: productId.oid),
-            throwsA(isA<NotFoundException>()));
+        expect(
+          () => client.delete(id: productId.oid),
+          throwsA(isA<ServerException>()),
+        );
       });
     });
 
@@ -370,8 +442,9 @@ void main() {
       void setupMockFind(List<Map<String, dynamic>> docs) {
         // The `find` method returns a stream-like object. We mock it to return
         // a stream created from our list of mock documents.
-        when(() => mockCollection.find(any()))
-            .thenAnswer((_) => Stream.fromIterable(docs));
+        when(
+          () => mockCollection.find(any()),
+        ).thenAnswer((_) => Stream.fromIterable(docs));
       }
 
       test('should return all items when no parameters are provided', () async {
@@ -391,8 +464,9 @@ void main() {
         expect(response.data.items[2].name, 'Product 2');
 
         // Verify that the correct SelectorBuilder was passed to find().
-        final captured =
-            verify(() => mockCollection.find(captureAny())).captured.first;
+        final captured = verify(
+          () => mockCollection.find(captureAny()),
+        ).captured.first;
         expect(captured, isA<SelectorBuilder>());
 
         final builder = captured as SelectorBuilder;
@@ -412,8 +486,9 @@ void main() {
         await client.readAll(userId: userId);
 
         // Assert
-        final captured =
-            verify(() => mockCollection.find(captureAny())).captured.first;
+        final captured = verify(
+          () => mockCollection.find(captureAny()),
+        ).captured.first;
         final builder = captured as SelectorBuilder;
 
         // The raw selector is inside the map of the builder
@@ -425,15 +500,16 @@ void main() {
         final productDocs = createProductDocs(1);
         setupMockFind(productDocs);
         final filter = {
-          'price': {r'$gte': 12.0}
+          'price': {r'$gte': 12.0},
         };
 
         // Act
         await client.readAll(filter: filter);
 
         // Assert
-        final captured =
-            verify(() => mockCollection.find(captureAny())).captured.first;
+        final captured = verify(
+          () => mockCollection.find(captureAny()),
+        ).captured.first;
         final builder = captured as SelectorBuilder;
 
         expect(builder.map, containsPair('price', {'\$gte': 12.0}));
@@ -445,15 +521,16 @@ void main() {
         setupMockFind(productDocs);
         const userId = 'user-abc';
         final filter = {
-          'price': {r'$gte': 12.0}
+          'price': {r'$gte': 12.0},
         };
 
         // Act
         await client.readAll(userId: userId, filter: filter);
 
         // Assert
-        final captured =
-            verify(() => mockCollection.find(captureAny())).captured.first;
+        final captured = verify(
+          () => mockCollection.find(captureAny()),
+        ).captured.first;
         final builder = captured as SelectorBuilder;
 
         expect(builder.map, containsPair('userId', userId));
@@ -470,8 +547,9 @@ void main() {
         await client.readAll(sort: sort);
 
         // Assert
-        final captured =
-            verify(() => mockCollection.find(captureAny())).captured.first;
+        final captured = verify(
+          () => mockCollection.find(captureAny()),
+        ).captured.first;
         final builder = captured as SelectorBuilder;
 
         // The sort options are in the 'orderby' key of the builder's map
@@ -494,8 +572,9 @@ void main() {
         await client.readAll(sort: sort);
 
         // Assert
-        final captured =
-            verify(() => mockCollection.find(captureAny())).captured.first;
+        final captured = verify(
+          () => mockCollection.find(captureAny()),
+        ).captured.first;
         final builder = captured as SelectorBuilder;
 
         expect(
@@ -504,90 +583,97 @@ void main() {
         );
       });
 
-      test('should respect explicit _id sort order and not add a duplicate',
-          () async {
-        // Arrange
-        final productDocs = createProductDocs(2);
-        setupMockFind(productDocs);
-        final sort = [
-          const SortOption('price', SortOrder.asc),
-          const SortOption('_id', SortOrder.desc), // Explicit _id sort
-        ];
+      test(
+        'should respect explicit _id sort order and not add a duplicate',
+        () async {
+          // Arrange
+          final productDocs = createProductDocs(2);
+          setupMockFind(productDocs);
+          final sort = [
+            const SortOption('price', SortOrder.asc),
+            const SortOption('_id', SortOrder.desc), // Explicit _id sort
+          ];
 
-        // Act
-        await client.readAll(sort: sort);
+          // Act
+          await client.readAll(sort: sort);
 
-        // Assert
-        final captured =
-            verify(() => mockCollection.find(captureAny())).captured.first;
-        final builder = captured as SelectorBuilder;
+          // Assert
+          final captured = verify(
+            () => mockCollection.find(captureAny()),
+          ).captured.first;
+          final builder = captured as SelectorBuilder;
 
-        expect(
-          builder.map,
-          containsPair('orderby', {'price': 1, '_id': -1}),
-        );
-      });
+          expect(
+            builder.map,
+            containsPair('orderby', {'price': 1, '_id': -1}),
+          );
+        },
+      );
 
       group('pagination', () {
         test(
-            'should return paginated response with hasMore true when more items exist',
-            () async {
-          // Arrange
-          final productDocs = createProductDocs(5); // 5 items in DB
-          setupMockFind(productDocs);
-          const pagination = PaginationOptions(limit: 3);
+          'should return paginated response with hasMore true when more items exist',
+          () async {
+            // Arrange
+            final productDocs = createProductDocs(5); // 5 items in DB
+            setupMockFind(productDocs);
+            const pagination = PaginationOptions(limit: 3);
 
-          // Act
-          final response = await client.readAll(pagination: pagination);
+            // Act
+            final response = await client.readAll(pagination: pagination);
 
-          // Assert
-          expect(response.data.items.length, 3);
-          expect(response.data.hasMore, isTrue);
-          expect(response.data.cursor, isNotNull);
-          expect(
-            response.data.cursor,
-            (productDocs[2]['_id']! as ObjectId).oid,
-          );
+            // Assert
+            expect(response.data.items.length, 3);
+            expect(response.data.hasMore, isTrue);
+            expect(response.data.cursor, isNotNull);
+            expect(
+              response.data.cursor,
+              (productDocs[2]['_id']! as ObjectId).oid,
+            );
 
-          final captured =
-              verify(() => mockCollection.find(captureAny())).captured.first;
-          final builder = captured as SelectorBuilder;
-          expect(builder.paramLimit, 4); // limit (3) + 1
-        });
-
-        test(
-            'should return paginated response with hasMore false when items match limit',
-            () async {
-          // Arrange
-          final productDocs = createProductDocs(3); // 3 items in DB
-          setupMockFind(productDocs);
-          const pagination = PaginationOptions(limit: 3);
-
-          // Act
-          final response = await client.readAll(pagination: pagination);
-
-          // Assert
-          expect(response.data.items.length, 3);
-          expect(response.data.hasMore, isFalse);
-          expect(response.data.cursor, isNull);
-        });
+            final captured = verify(
+              () => mockCollection.find(captureAny()),
+            ).captured.first;
+            final builder = captured as SelectorBuilder;
+            expect(builder.paramLimit, 4); // limit (3) + 1
+          },
+        );
 
         test(
-            'should return paginated response with hasMore false when items are less than limit',
-            () async {
-          // Arrange
-          final productDocs = createProductDocs(2); // 2 items in DB
-          setupMockFind(productDocs);
-          const pagination = PaginationOptions(limit: 3);
+          'should return paginated response with hasMore false when items match limit',
+          () async {
+            // Arrange
+            final productDocs = createProductDocs(3); // 3 items in DB
+            setupMockFind(productDocs);
+            const pagination = PaginationOptions(limit: 3);
 
-          // Act
-          final response = await client.readAll(pagination: pagination);
+            // Act
+            final response = await client.readAll(pagination: pagination);
 
-          // Assert
-          expect(response.data.items.length, 2);
-          expect(response.data.hasMore, isFalse);
-          expect(response.data.cursor, isNull);
-        });
+            // Assert
+            expect(response.data.items.length, 3);
+            expect(response.data.hasMore, isFalse);
+            expect(response.data.cursor, isNull);
+          },
+        );
+
+        test(
+          'should return paginated response with hasMore false when items are less than limit',
+          () async {
+            // Arrange
+            final productDocs = createProductDocs(2); // 2 items in DB
+            setupMockFind(productDocs);
+            const pagination = PaginationOptions(limit: 3);
+
+            // Act
+            final response = await client.readAll(pagination: pagination);
+
+            // Assert
+            expect(response.data.items.length, 2);
+            expect(response.data.hasMore, isFalse);
+            expect(response.data.cursor, isNull);
+          },
+        );
 
         test('should fetch the next page correctly using a cursor', () async {
           // --- ARRANGE ---
@@ -613,8 +699,9 @@ void main() {
           final cursorId = cursorDoc['_id']! as ObjectId;
 
           // Mock findOne() for when _addCursorToSelector looks up the cursor doc
-          when(() => mockCollection.findOne(any()))
-              .thenAnswer((_) async => cursorDoc);
+          when(
+            () => mockCollection.findOne(any()),
+          ).thenAnswer((_) async => cursorDoc);
 
           // Mock find() for the second page call
           setupMockFind(productDocs.skip(limit).toList());
@@ -637,107 +724,122 @@ void main() {
                 that: isA<SelectorBuilder>().having(
                   (s) => s.map,
                   'map',
-                  {r'$query': {'_id': cursorId}},
+                  {
+                    r'$query': {'_id': cursorId},
+                  },
                 ),
               ),
             ),
           ).called(1);
 
           // Verify the main find call contains the correct cursor logic
-          final captured =
-              verify(() => mockCollection.find(captureAny())).captured.last;
+          final captured = verify(
+            () => mockCollection.find(captureAny()),
+          ).captured.last;
           final builder = captured as SelectorBuilder;
           expect(builder.map, contains(r'$or'));
           expect(builder.map[r'$or'], [
             {
-              '_id': {r'$gt': cursorId}
-            }
+              '_id': {r'$gt': cursorId},
+            },
           ]);
         });
 
-        test('should throw BadRequestException for invalid cursor format',
-            () async {
-          // Arrange
-          const invalidCursor = 'not-a-valid-cursor';
-          const pagination = PaginationOptions(cursor: invalidCursor);
+        test(
+          'should throw BadRequestException for invalid cursor format',
+          () async {
+            // Arrange
+            const invalidCursor = 'not-a-valid-cursor';
+            const pagination = PaginationOptions(cursor: invalidCursor);
 
-          // Act & Assert
-          expect(
-            () => client.readAll(pagination: pagination),
-            throwsA(isA<BadRequestException>()),
-          );
-          verifyNever(() => mockCollection.findOne(any()));
-        });
+            // Act & Assert
+            expect(
+              () => client.readAll(pagination: pagination),
+              throwsA(isA<BadRequestException>()),
+            );
+            verifyNever(() => mockCollection.findOne(any()));
+          },
+        );
 
-        test('should throw BadRequestException if cursor doc is not found',
-            () async {
-          // Arrange
-          final validButNotFoundCursor = ObjectId().oid;
-          final pagination = PaginationOptions(cursor: validButNotFoundCursor);
+        test(
+          'should throw BadRequestException if cursor doc is not found',
+          () async {
+            // Arrange
+            final validButNotFoundCursor = ObjectId().oid;
+            final pagination = PaginationOptions(
+              cursor: validButNotFoundCursor,
+            );
 
-          // Mock findOne to return null, simulating a not-found cursor doc
-          when(() => mockCollection.findOne(any()))
-              .thenAnswer((_) async => null);
+            // Mock findOne to return null, simulating a not-found cursor doc
+            when(
+              () => mockCollection.findOne(any()),
+            ).thenAnswer((_) async => null);
 
-          // Act & Assert
-          expect(
-            () => client.readAll(pagination: pagination),
-            throwsA(isA<BadRequestException>()),
-          );
-          verify(() => mockCollection.findOne(any())).called(1);
-        });
+            // Act & Assert
+            expect(
+              () => client.readAll(pagination: pagination),
+              throwsA(isA<BadRequestException>()),
+            );
+            verify(() => mockCollection.findOne(any())).called(1);
+          },
+        );
 
-        test('should build correct cursor query with multiple sort fields',
-            () async {
-          // Arrange
-          final cursorId = ObjectId();
-          final cursorDoc = {
-            '_id': cursorId,
-            'name': 'Product B',
-            'price': 50.0,
-          };
-          final cursor = cursorId.oid;
-          final sortOptions = [
-            const SortOption('price', SortOrder.desc),
-            const SortOption('name', SortOrder.asc),
-          ];
-
-          when(() => mockCollection.findOne(any()))
-              .thenAnswer((_) async => cursorDoc);
-          setupMockFind([]); // Don't care about the result, just the query
-
-          // Act
-          await client.readAll(
-            pagination: PaginationOptions(cursor: cursor),
-            sort: sortOptions,
-          );
-
-          // Assert
-          final captured =
-              verify(() => mockCollection.find(captureAny())).captured.last;
-          final builder = captured as SelectorBuilder;
-
-          // Verify the complex $or condition for multi-field sort
-          expect(builder.map[r'$or'], [
-            {
-              'price': {r'$lt': 50.0}
-            },
-            {
-              'price': 50.0,
-              'name': {r'$gt': 'Product B'}
-            },
-            {
-              'price': 50.0,
+        test(
+          'should build correct cursor query with multiple sort fields',
+          () async {
+            // Arrange
+            final cursorId = ObjectId();
+            final cursorDoc = {
+              '_id': cursorId,
               'name': 'Product B',
-              '_id': {r'$gt': cursorId}
-            }
-          ]);
-        });
+              'price': 50.0,
+            };
+            final cursor = cursorId.oid;
+            final sortOptions = [
+              const SortOption('price', SortOrder.desc),
+              const SortOption('name', SortOrder.asc),
+            ];
+
+            when(
+              () => mockCollection.findOne(any()),
+            ).thenAnswer((_) async => cursorDoc);
+            setupMockFind([]); // Don't care about the result, just the query
+
+            // Act
+            await client.readAll(
+              pagination: PaginationOptions(cursor: cursor),
+              sort: sortOptions,
+            );
+
+            // Assert
+            final captured = verify(
+              () => mockCollection.find(captureAny()),
+            ).captured.last;
+            final builder = captured as SelectorBuilder;
+
+            // Verify the complex $or condition for multi-field sort
+            expect(builder.map[r'$or'], [
+              {
+                'price': {r'$lt': 50.0},
+              },
+              {
+                'price': 50.0,
+                'name': {r'$gt': 'Product B'},
+              },
+              {
+                'price': 50.0,
+                'name': 'Product B',
+                '_id': {r'$gt': cursorId},
+              },
+            ]);
+          },
+        );
 
         test('should throw ServerException on database error', () async {
           // Arrange
-          when(() => mockCollection.find(any()))
-              .thenThrow(Exception('DB connection failed'));
+          when(
+            () => mockCollection.find(any()),
+          ).thenThrow(Exception('DB connection failed'));
 
           // Act & Assert
           expect(
