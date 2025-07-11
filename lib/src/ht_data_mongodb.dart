@@ -57,6 +57,30 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     return doc;
   }
 
+  /// Builds a MongoDB query selector from the provided filter and userId.
+  ///
+  /// The [filter] map is expected to be in a format compatible with MongoDB's
+  /// query syntax (e.g., using operators like `$in`, `$gte`).
+  Map<String, dynamic> _buildSelector(
+    Map<String, dynamic>? filter,
+    String? userId,
+  ) {
+    final selector = <String, dynamic>{};
+
+    if (userId != null) {
+      selector['userId'] = userId;
+    }
+
+    if (filter != null) {
+      // The filter map is assumed to be in valid MongoDB query format,
+      // so we can merge it directly.
+      selector.addAll(filter);
+    }
+
+    _logger.finer('Built MongoDB selector: $selector');
+    return selector;
+  }
+
   @override
   Future<SuccessApiResponse<T>> create({
     required T item,
@@ -177,8 +201,8 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       // This structure sets up the flow for the next steps.
       // The logic for selector, sorting, and pagination will be built out.
 
-      // Step 3.2: Build the query selector (to be implemented).
-      final selector = <String, dynamic>{};
+      // Step 3.2: Build the query selector.
+      final selector = _buildSelector(filter, userId);
 
       // Step 3.3: Build the sort builder (to be implemented).
       final sortBuilder = <String, dynamic>{};
