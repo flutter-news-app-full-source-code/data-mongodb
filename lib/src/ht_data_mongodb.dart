@@ -58,9 +58,35 @@ class HtDataMongodb<T> implements HtDataClient<T> {
   }
 
   @override
-  Future<SuccessApiResponse<T>> create({required T item, String? userId}) {
-    // TODO: implement create
-    throw UnimplementedError();
+  Future<SuccessApiResponse<T>> create({
+    required T item,
+    String? userId,
+  }) async {
+    _logger.fine('Creating item in $_modelName, userId: $userId');
+    try {
+      final doc = _mapModelToMongoDocument(item);
+      if (userId != null) {
+        doc['userId'] = userId;
+      }
+
+      final writeResult = await _collection.insertOne(doc);
+
+      if (!writeResult.isSuccess || writeResult.document == null) {
+        _logger.severe('MongoDB create failed: ${writeResult.writeError}');
+        throw ServerException(
+          'Failed to create item: ${writeResult.writeError?.errmsg}',
+        );
+      }
+
+      final createdItem = _mapMongoDocumentToModel(writeResult.document!);
+      return SuccessApiResponse(
+        data: createdItem,
+        metadata: ResponseMetadata.now(),
+      );
+    } on MongoDartError catch (e, s) {
+      _logger.severe('MongoDartError during create', e, s);
+      throw ServerException('Database error during create: ${e.message}');
+    }
   }
 
   @override
