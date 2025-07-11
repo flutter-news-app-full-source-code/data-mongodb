@@ -654,6 +654,20 @@ void main() {
             }
           ]);
         });
+
+        test('should throw BadRequestException for invalid cursor format',
+            () async {
+          // Arrange
+          const invalidCursor = 'not-a-valid-cursor';
+          const pagination = PaginationOptions(cursor: invalidCursor);
+
+          // Act & Assert
+          expect(
+            () => client.readAll(pagination: pagination),
+            throwsA(isA<BadRequestException>()),
+          );
+          verifyNever(() => mockCollection.findOne(any()));
+        });
       });
     });
   });
