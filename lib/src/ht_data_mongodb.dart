@@ -90,9 +90,37 @@ class HtDataMongodb<T> implements HtDataClient<T> {
   }
 
   @override
-  Future<void> delete({required String id, String? userId}) {
-    // TODO: implement delete
-    throw UnimplementedError();
+  Future<void> delete({required String id, String? userId}) async {
+    _logger.fine(
+      'Deleting item with id: $id from $_modelName, userId: $userId',
+    );
+    try {
+      if (!ObjectId.isValidHexId(id)) {
+        throw BadRequestException('Invalid ID format: "$id"');
+      }
+
+      final selector = <String, dynamic>{
+        '_id': ObjectId.fromHexString(id),
+      };
+      if (userId != null) {
+        selector['userId'] = userId;
+      }
+
+      final writeResult = await _collection.deleteOne(selector);
+
+      if (writeResult.nRemoved == 0) {
+        _logger.warning(
+          'Delete FAILED: Item with id "$id" not found in $_modelName for userId: $userId',
+        );
+        throw NotFoundException(
+          'Item with ID "$id" not found for deletion in $_modelName.',
+        );
+      }
+      // No return value on success
+    } on MongoDartError catch (e, s) {
+      _logger.severe('MongoDartError during delete', e, s);
+      throw ServerException('Database error during delete: ${e.message}');
+    }
   }
 
   @override
