@@ -81,6 +81,32 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     return selector;
   }
 
+  /// Builds a MongoDB sort map from the provided list of [SortOption].
+  ///
+  /// The [sortOptions] list is converted into a map where keys are field names
+  /// and values are `1` for ascending or `-1` for descending.
+  ///
+  /// For stable pagination, it's crucial to have a deterministic sort order.
+  /// This implementation ensures that `_id` is always included as a final
+  /// tie-breaker if it's not already part of the sort criteria.
+  Map<String, int> _buildSortBuilder(List<SortOption>? sortOptions) {
+    final sortBuilder = <String, int>{};
+
+    if (sortOptions != null && sortOptions.isNotEmpty) {
+      for (final option in sortOptions) {
+        sortBuilder[option.field] = option.order == SortOrder.asc ? 1 : -1;
+      }
+    }
+
+    // Add `_id` as a final, unique tie-breaker for stable sorting.
+    if (!sortBuilder.containsKey('_id')) {
+      sortBuilder['_id'] = 1; // Default to ascending for the tie-breaker.
+    }
+
+    _logger.finer('Built MongoDB sort builder: $sortBuilder');
+    return sortBuilder;
+  }
+
   @override
   Future<SuccessApiResponse<T>> create({
     required T item,
@@ -204,8 +230,8 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       // Step 3.2: Build the query selector.
       final selector = _buildSelector(filter, userId);
 
-      // Step 3.3: Build the sort builder (to be implemented).
-      final sortBuilder = <String, dynamic>{};
+      // Step 3.3: Build the sort builder.
+      final sortBuilder = _buildSortBuilder(sort);
 
       // Step 3.4: Handle pagination and execute query (to be implemented).
       final items = <T>[];
