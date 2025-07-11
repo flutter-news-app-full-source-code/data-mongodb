@@ -33,6 +33,30 @@ class HtDataMongodb<T> implements HtDataClient<T> {
   /// A getter for the MongoDB collection for the given model type [T].
   DbCollection get _collection => _connectionManager.db.collection(_modelName);
 
+  /// Maps a document received from MongoDB to a model of type [T].
+  ///
+  /// This function handles the critical transformation of MongoDB's `_id`
+  /// (an `ObjectId`) into the `id` (a `String`) expected by the data models.
+  T _mapMongoDocumentToModel(Map<String, dynamic> doc) {
+    // MongoDB uses `_id` with ObjectId, our models use `id` with String.
+    // We need to perform this mapping before deserializing.
+    doc['id'] = (doc['_id'] as ObjectId).toHexString();
+    doc.remove('_id');
+    return _fromJson(doc);
+  }
+
+  /// Maps a model of type [T] to a document suitable for MongoDB.
+  ///
+  /// This function prepares the data for insertion by removing the `id` field,
+  /// as MongoDB will automatically generate the `_id` field.
+  Map<String, dynamic> _mapModelToMongoDocument(T item) {
+    final doc = _toJson(item);
+    // The `id` field in our model is not part of the MongoDB document schema,
+    // as MongoDB uses `_id`. We remove it before insertion/update.
+    doc.remove('id');
+    return doc;
+  }
+
   @override
   Future<SuccessApiResponse<T>> create({required T item, String? userId}) {
     // TODO: implement create
