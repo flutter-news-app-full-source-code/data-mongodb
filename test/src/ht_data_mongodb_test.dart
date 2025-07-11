@@ -209,5 +209,86 @@ void main() {
             throwsA(isA<NotFoundException>()));
       });
     });
+
+    group('update', () {
+      final productId = ObjectId();
+      final updatedProduct = Product(
+        id: productId.oid,
+        name: 'Updated Gadget',
+        price: 129.99,
+      );
+      final updatedProductDoc = {
+        'name': 'Updated Gadget',
+        'price': 129.99,
+      };
+
+      test('should update an item successfully', () async {
+        // Arrange
+        final writeResult = MockWriteResult();
+        when(() => writeResult.nModified).thenReturn(1);
+        when(() => mockCollection.replaceOne(any(), any()))
+            .thenAnswer((_) async => writeResult);
+
+        // Act
+        final response =
+            await client.update(id: productId.oid, item: updatedProduct);
+
+        // Assert
+        expect(response.data, updatedProduct);
+        final captured =
+            verify(() => mockCollection.replaceOne(captureAny(), captureAny()))
+                .captured;
+        expect(captured[0], {'_id': productId});
+        expect(captured[1], updatedProductDoc);
+      });
+
+      test('should update a user-scoped item successfully', () async {
+        // Arrange
+        const userId = 'user-123';
+        final updatedProductDocWithUser = {...updatedProductDoc, 'userId': userId};
+        final writeResult = MockWriteResult();
+        when(() => writeResult.nModified).thenReturn(1);
+        when(() => mockCollection.replaceOne(any(), any()))
+            .thenAnswer((_) async => writeResult);
+
+        // Act
+        final response = await client.update(
+          id: productId.oid,
+          item: updatedProduct,
+          userId: userId,
+        );
+
+        // Assert
+        expect(response.data, updatedProduct);
+        final captured =
+            verify(() => mockCollection.replaceOne(captureAny(), captureAny()))
+                .captured;
+        expect(captured[0], {'_id': productId, 'userId': userId});
+        expect(captured[1], updatedProductDocWithUser);
+      });
+
+      test('should throw BadRequestException for invalid id format', () {
+        // Arrange
+        const invalidId = 'not-an-object-id';
+
+        // Act & Assert
+        expect(() => client.update(id: invalidId, item: updatedProduct),
+            throwsA(isA<BadRequestException>()));
+        verifyNever(() => mockCollection.replaceOne(any(), any()));
+      });
+
+      test('should throw NotFoundException if item to update does not exist',
+          () {
+        // Arrange
+        final writeResult = MockWriteResult();
+        when(() => writeResult.nModified).thenReturn(0);
+        when(() => mockCollection.replaceOne(any(), any()))
+            .thenAnswer((_) async => writeResult);
+
+        // Act & Assert
+        expect(() => client.update(id: productId.oid, item: updatedProduct),
+            throwsA(isA<NotFoundException>()));
+      });
+    });
   });
 }
