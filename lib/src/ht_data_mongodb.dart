@@ -39,10 +39,12 @@ class HtDataMongodb<T> implements HtDataClient<T> {
   /// (an `ObjectId`) into the `id` (a `String`) expected by the data models.
   T _mapMongoDocumentToModel(Map<String, dynamic> doc) {
     // MongoDB uses `_id` with ObjectId, our models use `id` with String.
-    // We need to perform this mapping before deserializing.
-    doc['id'] = (doc['_id'] as ObjectId).toHexString();
-    doc.remove('_id');
-    return _fromJson(doc);
+    // We create a copy to avoid modifying the original map, which could cause
+    // issues when determining the next cursor.
+    final newDoc = Map<String, dynamic>.from(doc);
+    newDoc['id'] = (newDoc['_id'] as ObjectId).toHexString();
+    newDoc.remove('_id');
+    return _fromJson(newDoc);
   }
 
   /// Maps a model of type [T] to a document suitable for MongoDB.
@@ -105,6 +107,53 @@ class HtDataMongodb<T> implements HtDataClient<T> {
 
     _logger.finer('Built MongoDB sort builder: $sortBuilder');
     return sortBuilder;
+  }
+
+  /// Modifies the selector to include conditions for cursor-based pagination.
+  ///
+  /// This method implements keyset pagination by adding a complex `$or`
+  /// condition to the selector. This condition finds documents that come
+  /// *after* the cursor document based on the specified sort order.
+  Future<void> _addCursorToSelector(
+    String cursorId,
+    Map<String, dynamic> selector,
+    Map<String, int> sortBuilder,
+  ) async {
+    if (!ObjectId.isValidHexId(cursorId)) {
+      _logger.warning('Invalid cursor format: $cursorId');
+      throw const BadRequestException('Invalid cursor format.');
+    }
+    final cursorObjectId = ObjectId.fromHexString(cursorId);
+
+    final cursorDoc = await _collection.findOne(where.id(cursorObjectId));
+    if (cursorDoc == null) {
+      _logger.warning('Cursor document with id $cursorId not found.');
+      throw const BadRequestException('Cursor document not found.');
+    }
+
+    final orConditions = <Map<String, dynamic>>[];
+    final sortFields = sortBuilder.keys.toList();
+
+    for (var i = 0; i < sortFields.length; i++) {
+      final currentField = sortFields[i];
+      final sortOrder = sortBuilder[currentField]!;
+      final cursorValue = cursorDoc[currentField];
+
+      final condition = <String, dynamic>{};
+      for (var j = 0; j < i; j++) {
+        final prevField = sortFields[j];
+        condition[prevField] = cursorDoc[prevField];
+      }
+
+      condition[currentField] = {
+        (sortOrder == 1 ? r'$gt' : r'$lt'): cursorValue,
+      };
+      orConditions.add(condition);
+    }
+
+    // This assumes no other $or conditions exist in the base filter.
+    selector[r'$or'] = orConditions;
+    _logger.finer('Added cursor conditions to selector: $selector');
   }
 
   @override
@@ -224,23 +273,35 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       '$pagination, sort: $sort, userId: $userId',
     );
     try {
-      // This structure sets up the flow for the next steps.
-      // The logic for selector, sorting, and pagination will be built out.
-
-      // Step 3.2: Build the query selector.
       final selector = _buildSelector(filter, userId);
-
-      // Step 3.3: Build the sort builder.
       final sortBuilder = _buildSortBuilder(sort);
+      final limit = pagination?.limit ?? 20;
 
-      // Step 3.4: Handle pagination and execute query (to be implemented).
-      final items = <T>[];
-      const hasMore = false;
-      const String? cursor = null;
+      if (pagination?.cursor != null) {
+        await _addCursorToSelector(pagination!.cursor!, selector, sortBuilder);
+      }
+
+      // Fetch one extra item to determine if there are more pages.
+      final findResult = await _collection
+          .find(
+            selector..sortBy(sortBuilder)..limit(limit + 1),
+          )
+          .toList();
+
+      final hasMore = findResult.length > limit;
+      // Take only the requested number of items for the final list.
+      final documentsForPage = findResult.take(limit).toList();
+
+      final items = documentsForPage.map(_mapMongoDocumentToModel).toList();
+
+      // The cursor is the ID of the last item in the current page.
+      final nextCursor = (documentsForPage.isNotEmpty && hasMore)
+          ? (documentsForPage.last['_id'] as ObjectId).toHexString()
+          : null;
 
       final paginatedResponse = PaginatedResponse(
         items: items,
-        cursor: cursor,
+        cursor: nextCursor,
         hasMore: hasMore,
       );
 
