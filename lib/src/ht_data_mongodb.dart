@@ -3,6 +3,7 @@ import 'package:ht_data_mongodb/src/mongo_db_connection_manager.dart';
 import 'package:ht_shared/ht_shared.dart';
 import 'package:logging/logging.dart';
 import 'package:mongo_dart/mongo_dart.dart';
+import 'package:uuid/uuid.dart';
 
 /// {@template ht_data_mongodb}
 /// A MongoDB implementation of the [HtDataClient] interface.
@@ -29,6 +30,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
   final FromJson<T> _fromJson;
   final ToJson<T> _toJson;
   final Logger _logger;
+  final _uuid = const Uuid();
 
   /// A getter for the MongoDB collection for the given model type [T].
   DbCollection get _collection => _connectionManager.db.collection(_modelName);
@@ -42,8 +44,9 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     // We create a copy to avoid modifying the original map, which could cause
     // issues when determining the next cursor.
     final newDoc = Map<String, dynamic>.from(doc);
-    newDoc['id'] = (newDoc['_id'] as ObjectId).toHexString();
-    newDoc.remove('_id');
+    newDoc['id'] = (newDoc['_id'] as ObjectId).oid;
+    // The linter incorrectly flags this as a candidate for a cascade.
+    // ignore: cascade_invocations
     return _fromJson(newDoc);
   }
 
@@ -52,11 +55,9 @@ class HtDataMongodb<T> implements HtDataClient<T> {
   /// This function prepares the data for insertion by removing the `id` field,
   /// as MongoDB will automatically generate the `_id` field.
   Map<String, dynamic> _mapModelToMongoDocument(T item) {
-    final doc = _toJson(item);
     // The `id` field in our model is not part of the MongoDB document schema,
     // as MongoDB uses `_id`. We remove it before insertion/update.
-    doc.remove('id');
-    return doc;
+    return _toJson(item)..remove('id');
   }
 
   /// Builds a MongoDB query selector from the provided filter and userId.
@@ -180,11 +181,14 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       final createdItem = _mapMongoDocumentToModel(writeResult.document!);
       return SuccessApiResponse(
         data: createdItem,
-        metadata: ResponseMetadata.now(),
+        metadata: ResponseMetadata(
+          requestId: _uuid.v4(),
+          timestamp: DateTime.now(),
+        ),
       );
-    } on MongoDartError catch (e, s) {
+    } on Exception catch (e, s) {
       _logger.severe('MongoDartError during create', e, s);
-      throw ServerException('Database error during create: ${e.message}');
+      throw ServerException('Database error during create: $e');
     }
   }
 
@@ -216,9 +220,9 @@ class HtDataMongodb<T> implements HtDataClient<T> {
         );
       }
       // No return value on success
-    } on MongoDartError catch (e, s) {
+    } on Exception catch (e, s) {
       _logger.severe('MongoDartError during delete', e, s);
-      throw ServerException('Database error during delete: ${e.message}');
+      throw ServerException('Database error during delete: $e');
     }
   }
 
@@ -246,7 +250,8 @@ class HtDataMongodb<T> implements HtDataClient<T> {
 
       if (doc == null) {
         _logger.warning(
-          'Read FAILED: Item with id "$id" not found in $_modelName for userId: $userId',
+          'Read FAILED: Item with id "$id" not found in $_modelName for '
+          'userId: $userId',
         );
         throw NotFoundException(
           'Item with ID "$id" not found in $_modelName.',
@@ -254,10 +259,16 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       }
 
       final item = _mapMongoDocumentToModel(doc);
-      return SuccessApiResponse(data: item, metadata: ResponseMetadata.now());
-    } on MongoDartError catch (e, s) {
+      return SuccessApiResponse(
+        data: item,
+        metadata: ResponseMetadata(
+          requestId: _uuid.v4(),
+          timestamp: DateTime.now(),
+        ),
+      );
+    } on Exception catch (e, s) {
       _logger.severe('MongoDartError during read', e, s);
-      throw ServerException('Database error during read: ${e.message}');
+      throw ServerException('Database error during read: $e');
     }
   }
 
@@ -282,11 +293,11 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       }
 
       // Fetch one extra item to determine if there are more pages.
-      final findResult = await _collection
-          .find(
-            selector..sortBy(sortBuilder)..limit(limit + 1),
-          )
-          .toList();
+      final selectorBuilder = SelectorBuilder()
+        ..raw(selector)
+        ..sortBy(sortBuilder)
+        ..limit(limit + 1);
+      final findResult = await _collection.find(selectorBuilder).toList();
 
       final hasMore = findResult.length > limit;
       // Take only the requested number of items for the final list.
@@ -296,10 +307,10 @@ class HtDataMongodb<T> implements HtDataClient<T> {
 
       // The cursor is the ID of the last item in the current page.
       final nextCursor = (documentsForPage.isNotEmpty && hasMore)
-          ? (documentsForPage.last['_id'] as ObjectId).toHexString()
+          ? (documentsForPage.last['_id'] as ObjectId).oid
           : null;
 
-      final paginatedResponse = PaginatedResponse(
+      final paginatedResponse = PaginatedResponse<T>(
         items: items,
         cursor: nextCursor,
         hasMore: hasMore,
@@ -307,11 +318,14 @@ class HtDataMongodb<T> implements HtDataClient<T> {
 
       return SuccessApiResponse(
         data: paginatedResponse,
-        metadata: ResponseMetadata.now(),
+        metadata: ResponseMetadata(
+          requestId: _uuid.v4(),
+          timestamp: DateTime.now(),
+        ),
       );
-    } on MongoDartError catch (e, s) {
+    } on Exception catch (e, s) {
       _logger.severe('MongoDartError during readAll', e, s);
-      throw ServerException('Database error during readAll: ${e.message}');
+      throw ServerException('Database error during readAll: $e');
     }
   }
 
@@ -345,7 +359,8 @@ class HtDataMongodb<T> implements HtDataClient<T> {
 
       if (writeResult.nModified == 0) {
         _logger.warning(
-          'Update FAILED: Item with id "$id" not found in $_modelName for userId: $userId',
+          'Update FAILED: Item with id "$id" not found in $_modelName for '
+          'userId: $userId',
         );
         throw NotFoundException(
           'Item with ID "$id" not found for update in $_modelName.',
@@ -353,10 +368,16 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       }
 
       // The updated item is the one we passed in.
-      return SuccessApiResponse(data: item, metadata: ResponseMetadata.now());
-    } on MongoDartError catch (e, s) {
+      return SuccessApiResponse(
+        data: item,
+        metadata: ResponseMetadata(
+          requestId: _uuid.v4(),
+          timestamp: DateTime.now(),
+        ),
+      );
+    } on Exception catch (e, s) {
       _logger.severe('MongoDartError during update', e, s);
-      throw ServerException('Database error during update: ${e.message}');
+      throw ServerException('Database error during update: $e');
     }
   }
 }
