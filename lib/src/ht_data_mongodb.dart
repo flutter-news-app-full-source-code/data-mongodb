@@ -150,8 +150,43 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     required String id,
     required T item,
     String? userId,
-  }) {
-    // TODO: implement update
-    throw UnimplementedError();
+  }) async {
+    _logger.fine(
+      'Updating item with id: $id in $_modelName, userId: $userId',
+    );
+    try {
+      if (!ObjectId.isValidHexId(id)) {
+        throw BadRequestException('Invalid ID format: "$id"');
+      }
+
+      final selector = <String, dynamic>{
+        '_id': ObjectId.fromHexString(id),
+      };
+      if (userId != null) {
+        selector['userId'] = userId;
+      }
+
+      final docToUpdate = _mapModelToMongoDocument(item);
+      if (userId != null) {
+        docToUpdate['userId'] = userId;
+      }
+
+      final writeResult = await _collection.replaceOne(selector, docToUpdate);
+
+      if (writeResult.nModified == 0) {
+        _logger.warning(
+          'Update FAILED: Item with id "$id" not found in $_modelName for userId: $userId',
+        );
+        throw NotFoundException(
+          'Item with ID "$id" not found for update in $_modelName.',
+        );
+      }
+
+      // The updated item is the one we passed in.
+      return SuccessApiResponse(data: item, metadata: ResponseMetadata.now());
+    } on MongoDartError catch (e, s) {
+      _logger.severe('MongoDartError during update', e, s);
+      throw ServerException('Database error during update: ${e.message}');
+    }
   }
 }
