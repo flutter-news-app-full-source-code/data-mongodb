@@ -293,10 +293,14 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       }
 
       // Fetch one extra item to determine if there are more pages.
-      final selectorBuilder = SelectorBuilder()
-        ..raw(selector)
-        ..sortBy(sortBuilder)
-        ..limit(limit + 1);
+      final selectorBuilder = SelectorBuilder()..raw(selector);
+
+      // Apply sorting options by iterating over the built sort map.
+      sortBuilder.forEach((field, order) {
+        selectorBuilder.sortBy(field, descending: order == -1);
+      });
+      selectorBuilder.limit(limit + 1);
+
       final findResult = await _collection.find(selectorBuilder).toList();
 
       final hasMore = findResult.length > limit;
