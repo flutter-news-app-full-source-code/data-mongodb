@@ -459,6 +459,74 @@ void main() {
         expect(builder.map, containsPair('userId', userId));
         expect(builder.map, containsPair('price', {'\$gte': 12.0}));
       });
+
+      test('should apply a single sort option correctly', () async {
+        // Arrange
+        final productDocs = createProductDocs(2);
+        setupMockFind(productDocs);
+        final sort = [const SortOption('price', SortOrder.desc)];
+
+        // Act
+        await client.readAll(sort: sort);
+
+        // Assert
+        final captured =
+            verify(() => mockCollection.find(captureAny())).captured.first;
+        final builder = captured as SelectorBuilder;
+
+        // The sort options are in the 'orderby' key of the builder's map
+        expect(
+          builder.map,
+          containsPair('orderby', {'price': -1, '_id': 1}),
+        );
+      });
+
+      test('should apply multiple sort options correctly', () async {
+        // Arrange
+        final productDocs = createProductDocs(2);
+        setupMockFind(productDocs);
+        final sort = [
+          const SortOption('name', SortOrder.asc),
+          const SortOption('price', SortOrder.desc),
+        ];
+
+        // Act
+        await client.readAll(sort: sort);
+
+        // Assert
+        final captured =
+            verify(() => mockCollection.find(captureAny())).captured.first;
+        final builder = captured as SelectorBuilder;
+
+        expect(
+          builder.map,
+          containsPair('orderby', {'name': 1, 'price': -1, '_id': 1}),
+        );
+      });
+
+      test('should respect explicit _id sort order and not add a duplicate',
+          () async {
+        // Arrange
+        final productDocs = createProductDocs(2);
+        setupMockFind(productDocs);
+        final sort = [
+          const SortOption('price', SortOrder.asc),
+          const SortOption('_id', SortOrder.desc), // Explicit _id sort
+        ];
+
+        // Act
+        await client.readAll(sort: sort);
+
+        // Assert
+        final captured =
+            verify(() => mockCollection.find(captureAny())).captured.first;
+        final builder = captured as SelectorBuilder;
+
+        expect(
+          builder.map,
+          containsPair('orderby', {'price': 1, '_id': -1}),
+        );
+      });
     });
   });
 }
