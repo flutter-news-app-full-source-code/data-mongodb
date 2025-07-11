@@ -588,6 +588,69 @@ void main() {
           expect(response.data.hasMore, isFalse);
           expect(response.data.cursor, isNull);
         });
+
+        test('should fetch the next page correctly using a cursor', () async {
+          // --- ARRANGE ---
+          final productDocs = createProductDocs(5); // Total 5 items
+          const limit = 2;
+
+          // --- FIRST CALL ---
+          // Mock find() to return the first page + 1 extra item
+          setupMockFind(productDocs.take(limit + 1).toList());
+          final firstResponse = await client.readAll(
+            pagination: const PaginationOptions(limit: limit),
+          );
+          final cursor = firstResponse.data.cursor;
+
+          // Assert first call was correct
+          expect(cursor, isNotNull);
+          expect(firstResponse.data.items.length, limit);
+          expect(firstResponse.data.hasMore, isTrue);
+
+          // --- SECOND CALL ---
+          // The cursor document is the last item of the first page
+          final cursorDoc = productDocs[limit - 1];
+          final cursorId = cursorDoc['_id']! as ObjectId;
+
+          // Mock findOne() for when _addCursorToSelector looks up the cursor doc
+          when(() => mockCollection.findOne(any()))
+              .thenAnswer((_) async => cursorDoc);
+
+          // Mock find() for the second page call
+          setupMockFind(productDocs.skip(limit).toList());
+
+          // Act
+          final secondResponse = await client.readAll(
+            pagination: PaginationOptions(limit: limit, cursor: cursor),
+          );
+
+          // Assert second call results
+          expect(secondResponse.data.items.length, limit);
+          expect(secondResponse.data.hasMore, isTrue);
+          expect(secondResponse.data.items[0].name, 'Product 2');
+          expect(secondResponse.data.items[1].name, 'Product 3');
+
+          // Verify the findOne call for the cursor document
+          verify(
+            () => mockCollection.findOne(
+              any(
+                that: isA<SelectorBuilder>()
+                    .having((s) => s.map, 'map', {'_id': cursorId}),
+              ),
+            ),
+          ).called(1);
+
+          // Verify the main find call contains the correct cursor logic
+          final captured =
+              verify(() => mockCollection.find(captureAny())).captured.last;
+          final builder = captured as SelectorBuilder;
+          expect(builder.map, contains(r'$or'));
+          expect(builder.map[r'$or'], [
+            {
+              '_id': {r'$gt': cursorId}
+            }
+          ]);
+        });
       });
     });
   });
