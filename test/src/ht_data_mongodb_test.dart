@@ -401,6 +401,64 @@ void main() {
         // Check that the limit is the default (20) + 1 for hasMore check.
         expect(builder.paramLimit, 21);
       });
+
+      test('should apply userId filter correctly', () async {
+        // Arrange
+        final productDocs = createProductDocs(2);
+        setupMockFind(productDocs);
+        const userId = 'user-abc';
+
+        // Act
+        await client.readAll(userId: userId);
+
+        // Assert
+        final captured =
+            verify(() => mockCollection.find(captureAny())).captured.first;
+        final builder = captured as SelectorBuilder;
+
+        // The raw selector is inside the map of the builder
+        expect(builder.map, containsPair('userId', userId));
+      });
+
+      test('should apply complex filter correctly', () async {
+        // Arrange
+        final productDocs = createProductDocs(1);
+        setupMockFind(productDocs);
+        final filter = {
+          'price': {r'$gte': 12.0}
+        };
+
+        // Act
+        await client.readAll(filter: filter);
+
+        // Assert
+        final captured =
+            verify(() => mockCollection.find(captureAny())).captured.first;
+        final builder = captured as SelectorBuilder;
+
+        expect(builder.map, containsPair('price', {'\$gte': 12.0}));
+      });
+
+      test('should combine userId and complex filter correctly', () async {
+        // Arrange
+        final productDocs = createProductDocs(1);
+        setupMockFind(productDocs);
+        const userId = 'user-abc';
+        final filter = {
+          'price': {r'$gte': 12.0}
+        };
+
+        // Act
+        await client.readAll(userId: userId, filter: filter);
+
+        // Assert
+        final captured =
+            verify(() => mockCollection.find(captureAny())).captured.first;
+        final builder = captured as SelectorBuilder;
+
+        expect(builder.map, containsPair('userId', userId));
+        expect(builder.map, containsPair('price', {'\$gte': 12.0}));
+      });
     });
   });
 }
