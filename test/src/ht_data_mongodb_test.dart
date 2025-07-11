@@ -733,6 +733,18 @@ void main() {
             }
           ]);
         });
+
+        test('should throw ServerException on database error', () async {
+          // Arrange
+          when(() => mockCollection.find(any()))
+              .thenThrow(Exception('DB connection failed'));
+
+          // Act & Assert
+          expect(
+            () => client.readAll(),
+            throwsA(isA<ServerException>()),
+          );
+        });
       });
     });
   });
