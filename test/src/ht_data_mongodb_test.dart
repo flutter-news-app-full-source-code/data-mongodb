@@ -290,5 +290,67 @@ void main() {
             throwsA(isA<NotFoundException>()));
       });
     });
+
+    group('delete', () {
+      final productId = ObjectId();
+
+      test('should delete an item successfully', () async {
+        // Arrange
+        final writeResult = MockWriteResult();
+        when(() => writeResult.nRemoved).thenReturn(1);
+        when(() => mockCollection.deleteOne(any()))
+            .thenAnswer((_) async => writeResult);
+
+        // Act
+        await client.delete(id: productId.oid);
+
+        // Assert
+        final captured =
+            verify(() => mockCollection.deleteOne(captureAny())).captured.first;
+        expect(captured, {'_id': productId});
+      });
+
+      test('should delete a user-scoped item successfully', () async {
+        // Arrange
+        const userId = 'user-123';
+        final writeResult = MockWriteResult();
+        when(() => writeResult.nRemoved).thenReturn(1);
+        when(() => mockCollection.deleteOne(any()))
+            .thenAnswer((_) async => writeResult);
+
+        // Act
+        await client.delete(id: productId.oid, userId: userId);
+
+        // Assert
+        final captured =
+            verify(() => mockCollection.deleteOne(captureAny())).captured.first;
+        expect(captured, {'_id': productId, 'userId': userId});
+      });
+
+      test('should throw BadRequestException for invalid id format', () {
+        // Arrange
+        const invalidId = 'not-an-object-id';
+
+        // Act & Assert
+        expect(
+          () => client.delete(id: invalidId),
+          throwsA(isA<BadRequestException>()),
+        );
+        verifyNever(() => mockCollection.deleteOne(any()));
+      });
+
+      test('should throw NotFoundException if item to delete does not exist',
+          () {
+        // Arrange
+        final writeResult = MockWriteResult();
+        when(() => writeResult.nRemoved).thenReturn(0);
+        when(() => mockCollection.deleteOne(any()))
+            .thenAnswer((_) async => writeResult);
+
+        // Act & Assert
+        expect(() => client.delete(id: productId.oid),
+            throwsA(isA<NotFoundException>()));
+      });
+    });
   });
 }
