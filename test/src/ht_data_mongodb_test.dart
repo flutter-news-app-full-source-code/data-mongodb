@@ -686,6 +686,53 @@ void main() {
           );
           verify(() => mockCollection.findOne(any())).called(1);
         });
+
+        test('should build correct cursor query with multiple sort fields',
+            () async {
+          // Arrange
+          final cursorId = ObjectId();
+          final cursorDoc = {
+            '_id': cursorId,
+            'name': 'Product B',
+            'price': 50.0,
+          };
+          final cursor = cursorId.oid;
+          final sortOptions = [
+            const SortOption('price', SortOrder.desc),
+            const SortOption('name', SortOrder.asc),
+          ];
+
+          when(() => mockCollection.findOne(any()))
+              .thenAnswer((_) async => cursorDoc);
+          setupMockFind([]); // Don't care about the result, just the query
+
+          // Act
+          await client.readAll(
+            pagination: PaginationOptions(cursor: cursor),
+            sort: sortOptions,
+          );
+
+          // Assert
+          final captured =
+              verify(() => mockCollection.find(captureAny())).captured.last;
+          final builder = captured as SelectorBuilder;
+
+          // Verify the complex $or condition for multi-field sort
+          expect(builder.map[r'$or'], [
+            {
+              'price': {r'$lt': 50.0}
+            },
+            {
+              'price': 50.0,
+              'name': {r'$gt': 'Product B'}
+            },
+            {
+              'price': 50.0,
+              'name': 'Product B',
+              '_id': {r'$gt': cursorId}
+            }
+          ]);
+        });
       });
     });
   });
