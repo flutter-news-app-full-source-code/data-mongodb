@@ -142,5 +142,72 @@ void main() {
             throwsA(isA<ServerException>()));
       });
     });
+
+    group('read', () {
+      final productId = ObjectId();
+      final product = Product(
+        id: productId.oid,
+        name: 'Existing Gadget',
+        price: 49.99,
+      );
+      final productDoc = {
+        '_id': productId,
+        'name': 'Existing Gadget',
+        'price': 49.99,
+      };
+
+      test('should read an item successfully by id', () async {
+        // Arrange
+        when(() => mockCollection.findOne(any()))
+            .thenAnswer((_) async => productDoc);
+
+        // Act
+        final response = await client.read(id: productId.oid);
+
+        // Assert
+        expect(response.data, product);
+        final captured =
+            verify(() => mockCollection.findOne(captureAny())).captured.first;
+        expect(captured, {'_id': productId});
+      });
+
+      test('should read an item successfully by id and userId', () async {
+        // Arrange
+        const userId = 'user-123';
+        final productDocWithUser = {...productDoc, 'userId': userId};
+        when(() => mockCollection.findOne(any()))
+            .thenAnswer((_) async => productDocWithUser);
+
+        // Act
+        final response = await client.read(id: productId.oid, userId: userId);
+
+        // Assert
+        expect(response.data, product);
+        final captured =
+            verify(() => mockCollection.findOne(captureAny())).captured.first;
+        expect(captured, {'_id': productId, 'userId': userId});
+      });
+
+      test('should throw BadRequestException for invalid id format', () {
+        // Arrange
+        const invalidId = 'not-an-object-id';
+
+        // Act & Assert
+        expect(
+          () => client.read(id: invalidId),
+          throwsA(isA<BadRequestException>()),
+        );
+        verifyNever(() => mockCollection.findOne(any()));
+      });
+
+      test('should throw NotFoundException if item does not exist', () {
+        // Arrange
+        when(() => mockCollection.findOne(any())).thenAnswer((_) async => null);
+
+        // Act & Assert
+        expect(() => client.read(id: productId.oid),
+            throwsA(isA<NotFoundException>()));
+      });
+    });
   });
 }
