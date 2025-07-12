@@ -1,6 +1,6 @@
 # ht_data_mongodb
 
-![coverage: xx%](https://img.shields.io/badge/coverage-94-green)
+![coverage: 95%](https://img.shields.io/badge/coverage-95-green)
 [![style: very good analysis](https://img.shields.io/badge/style-very_good_analysis-B22C89.svg)](https://pub.dev/packages/very_good_analysis)
 [![License: PolyForm Free Trial](https://img.shields.io/badge/License-PolyForm%20Free%20Trial-blue)](https://polyformproject.org/licenses/free-trial/1.0.0)
 
@@ -46,6 +46,9 @@ Then run `dart pub get` or `flutter pub get`.
 - Automatically handles the mapping between your models' `String id` and MongoDB's `ObjectId _id`.
 - Supports both user-scoped and global data operations.
 - Throws standard exceptions from `package:ht_shared` for consistent error handling.
+- Implements `count` for efficient document counting.
+- Implements `aggregate` to execute powerful, server-side aggregation
+  pipelines, automatically scoping to a `userId` when provided.
 
 ## Usage
 
@@ -107,6 +110,26 @@ void main() async {
     print('Found ${response.data.items.length} products.');
     for (final product in response.data.items) {
       print('- ${product.name} (\$${product.price})');
+    }
+
+    // Example: Counting items
+    final countResponse = await client.count(
+      filter: {'price': {r'$lt': 15.0}},
+    );
+    print('Found ${countResponse.data} products cheaper than $15.');
+
+    // Example: Running an aggregation pipeline
+    final aggregateResponse = await client.aggregate(
+      pipeline: [
+        {
+          r'$group': {'_id': null, 'averagePrice': {r'$avg': r'$price'}},
+        },
+      ],
+    );
+    if (aggregateResponse.data.isNotEmpty) {
+      print(
+        'Average product price: \$${aggregateResponse.data.first['averagePrice']}',
+      );
     }
   } on HtHttpException catch (e) {
     print('An error occurred: ${e.message}');
