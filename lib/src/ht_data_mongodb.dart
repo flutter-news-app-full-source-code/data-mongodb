@@ -439,8 +439,9 @@ class HtDataMongodb<T> implements HtDataClient<T> {
         });
       }
 
-      final results =
-          await _collection.aggregateToStream(finalPipeline).toList();
+      final results = await _collection
+          .aggregateToStream(finalPipeline)
+          .toList();
 
       return SuccessApiResponse(
         data: results,
