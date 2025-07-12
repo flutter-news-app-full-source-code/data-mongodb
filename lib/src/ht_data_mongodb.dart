@@ -392,4 +392,75 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       throw ServerException('Database error during update: $e');
     }
   }
+
+  @override
+  Future<SuccessApiResponse<int>> count({
+    String? userId,
+    Map<String, dynamic>? filter,
+  }) async {
+    _logger.fine(
+      'Counting items in $_modelName with filter: $filter, userId: $userId',
+    );
+    try {
+      final selector = _buildSelector(filter, userId);
+      final count = await _collection.countDocuments(selector);
+
+      return SuccessApiResponse(
+        data: count,
+        metadata: ResponseMetadata(
+          requestId: _uuid.v4(),
+          timestamp: DateTime.now(),
+        ),
+      );
+    } on Exception catch (e, s) {
+      _logger.severe('MongoDartError during count', e, s);
+      throw ServerException('Database error during count: $e');
+    }
+  }
+
+  @override
+  Future<SuccessApiResponse<List<Map<String, dynamic>>>> aggregate({
+    required List<Map<String, dynamic>> pipeline,
+    String? userId,
+  }) async {
+    _logger.fine(
+      'Aggregating in $_modelName with pipeline: $pipeline, userId: $userId',
+    );
+    try {
+      // Create a mutable copy of the pipeline to prepend the user match stage.
+      final finalPipeline = List<Map<String, dynamic>>.from(pipeline);
+
+      // If a userId is provided, prepend a $match stage to scope the
+      // aggregation to that user's documents. This is a critical security
+      // and data-scoping measure.
+      if (userId != null) {
+        finalPipeline.insert(0, {
+          r'$match': {'userId': userId},
+        });
+      }
+
+      final results =
+          await _collection.aggregateToStream(finalPipeline).toList();
+
+      return SuccessApiResponse(
+        data: results,
+        metadata: ResponseMetadata(
+          requestId: _uuid.v4(),
+          timestamp: DateTime.now(),
+        ),
+      );
+    } on MongoDartError catch (e, s) {
+      _logger.severe('MongoDartError during aggregate', e, s);
+      // Check for common command errors that indicate a bad pipeline.
+      if (e.message.contains('Command failed')) {
+        throw BadRequestException(
+          'Aggregation pipeline failed: ${e.errmsg}',
+        );
+      }
+      throw ServerException('Database error during aggregate: $e');
+    } on Exception catch (e, s) {
+      _logger.severe('Unexpected error during aggregate', e, s);
+      throw ServerException('Unexpected error during aggregate: $e');
+    }
+  }
 }
