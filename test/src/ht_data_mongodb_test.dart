@@ -851,5 +851,157 @@ void main() {
         });
       });
     });
+
+    group('count', () {
+      test('should return the total count of items', () async {
+        // Arrange
+        when(() => mockCollection.count(any())).thenAnswer((_) async => 10);
+
+        // Act
+        final response = await client.count();
+
+        // Assert
+        expect(response.data, 10);
+        final captured =
+            verify(() => mockCollection.count(captureAny())).captured.first;
+        expect(captured, isEmpty); // No filter, no userId
+      });
+
+      test('should apply filter correctly', () async {
+        // Arrange
+        final filter = {'price': 10.0};
+        when(() => mockCollection.count(any())).thenAnswer((_) async => 3);
+
+        // Act
+        final response = await client.count(filter: filter);
+
+        // Assert
+        expect(response.data, 3);
+        final captured =
+            verify(() => mockCollection.count(captureAny())).captured.first;
+        expect(captured, filter);
+      });
+
+      test('should apply userId correctly', () async {
+        // Arrange
+        const userId = 'user-123';
+        when(() => mockCollection.count(any())).thenAnswer((_) async => 5);
+
+        // Act
+        final response = await client.count(userId: userId);
+
+        // Assert
+        expect(response.data, 5);
+        final captured =
+            verify(() => mockCollection.count(captureAny())).captured.first;
+        expect(captured, {'userId': userId});
+      });
+
+      test('should throw ServerException on database error', () async {
+        // Arrange
+        when(() => mockCollection.count(any()))
+            .thenThrow(Exception('DB connection failed'));
+
+        // Act & Assert
+        expect(() => client.count(), throwsA(isA<ServerException>()));
+      });
+    });
+
+    group('aggregate', () {
+      final pipeline = [
+        {
+          r'$group': {'_id': r'$category', 'count': 1},
+        },
+      ];
+      final results = [
+        {'_id': 'A', 'count': 5},
+        {'_id': 'B', 'count': 3},
+      ];
+
+      test('should execute a simple pipeline successfully', () async {
+        // Arrange
+        when(() => mockCollection.aggregateToStream(any()))
+            .thenAnswer((_) => Stream.fromIterable(results));
+
+        // Act
+        final response = await client.aggregate(pipeline: pipeline);
+
+        // Assert
+        expect(response.data, results);
+        final captured =
+            verify(() => mockCollection.aggregateToStream(captureAny()))
+                .captured
+                .first;
+        expect(captured, pipeline);
+      });
+
+      test('should prepend a $match stage when userId is provided', () async {
+        // Arrange
+        const userId = 'user-123';
+        when(() => mockCollection.aggregateToStream(any()))
+            .thenAnswer((_) => Stream.fromIterable(results));
+
+        // Act
+        await client.aggregate(pipeline: pipeline, userId: userId);
+
+        // Assert
+        final captured =
+            verify(() => mockCollection.aggregateToStream(captureAny()))
+                .captured
+                .first as List<Map<String, Object>>;
+
+        expect(captured.length, 2);
+        expect(captured.first, {
+          r'$match': {'userId': userId},
+        });
+        expect(captured.last, pipeline.first);
+      });
+
+      test(
+        'should throw BadRequestException for a failed command MongoDartError',
+        () async {
+          // Arrange
+          final mongoError = MongoDartError(
+            'Command failed: Invalid pipeline stage specified',
+          );
+          when(() => mockCollection.aggregateToStream(any()))
+              .thenThrow(mongoError);
+
+          // Act & Assert
+          expect(
+            () => client.aggregate(pipeline: pipeline),
+            throwsA(isA<BadRequestException>()),
+          );
+        },
+      );
+
+      test(
+        'should throw ServerException for a generic MongoDartError',
+        () async {
+          // Arrange
+          final mongoError = MongoDartError('Some other connection error');
+          when(() => mockCollection.aggregateToStream(any()))
+              .thenThrow(mongoError);
+
+          // Act & Assert
+          expect(
+            () => client.aggregate(pipeline: pipeline),
+            throwsA(isA<ServerException>()),
+          );
+        },
+      );
+
+      test('should throw ServerException on other database errors', () async {
+        // Arrange
+        when(() => mockCollection.aggregateToStream(any()))
+            .thenThrow(Exception('DB connection failed'));
+
+        // Act & Assert
+        expect(
+          () => client.aggregate(pipeline: pipeline),
+          throwsA(isA<ServerException>()),
+        );
+      });
+    });
   });
 }
