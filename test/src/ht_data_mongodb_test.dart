@@ -935,7 +935,7 @@ void main() {
         expect(captured, pipeline);
       });
 
-      test('should prepend a $match stage when userId is provided', () async {
+      test(r'should prepend a $match stage when userId is provided', () async {
         // Arrange
         const userId = 'user-123';
         when(() => mockCollection.aggregateToStream(any()))
