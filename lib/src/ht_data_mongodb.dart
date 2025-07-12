@@ -403,7 +403,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     );
     try {
       final selector = _buildSelector(filter, userId);
-      final count = await _collection.countDocuments(selector);
+      final count = await _collection.count(selector);
 
       return SuccessApiResponse(
         data: count,
@@ -427,8 +427,8 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       'Aggregating in $_modelName with pipeline: $pipeline, userId: $userId',
     );
     try {
-      // Create a mutable copy of the pipeline to prepend the user match stage.
-      final finalPipeline = List<Map<String, dynamic>>.from(pipeline);
+      // Create a mutable copy with the correct type for the driver.
+      final finalPipeline = List<Map<String, Object>>.from(pipeline);
 
       // If a userId is provided, prepend a $match stage to scope the
       // aggregation to that user's documents. This is a critical security
@@ -449,12 +449,17 @@ class HtDataMongodb<T> implements HtDataClient<T> {
           timestamp: DateTime.now(),
         ),
       );
+      // It is necessary to catch this specific Error type to translate
+      // a driver-level error about a bad pipeline (an input error from the
+      // caller) into a user-facing BadRequestException.
+      // ignore: avoid_catching_errors
     } on MongoDartError catch (e, s) {
       _logger.severe('MongoDartError during aggregate', e, s);
       // Check for common command errors that indicate a bad pipeline.
       if (e.message.contains('Command failed')) {
         throw BadRequestException(
-          'Aggregation pipeline failed: ${e.errmsg}',
+          // ignore: use_rethrow_when_possible
+          'Aggregation pipeline failed: ${e.message}',
         );
       }
       throw ServerException('Database error during aggregate: $e');
