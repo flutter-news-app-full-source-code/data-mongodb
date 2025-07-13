@@ -442,10 +442,20 @@ void main() {
 
       // Helper to set up the mock for the find operation.
       void setupMockFind(List<Map<String, dynamic>> docs) {
-        // The `find` method returns a stream-like object. We mock it to return
+        // The `modernFind` method returns a stream-like object. We mock it to return
         // a stream created from our list of mock documents.
         when(
-          () => mockCollection.find(any()),
+          () => mockCollection.modernFind(
+            filter: any(named: 'filter'),
+            sort: any(named: 'sort'),
+            limit: any(named: 'limit'),
+            skip: any(named: 'skip'),
+            projection: any(named: 'projection'),
+            hint: any(named: 'hint'),
+            hintDocument: any(named: 'hintDocument'),
+            findOptions: any(named: 'findOptions'),
+            rawOptions: any(named: 'rawOptions'),
+          ),
         ).thenAnswer((_) => Stream.fromIterable(docs));
       }
 
@@ -465,17 +475,28 @@ void main() {
         expect(response.data.items[1].name, 'Product 1');
         expect(response.data.items[2].name, 'Product 2');
 
-        // Verify that the correct SelectorBuilder was passed to find().
+        // Verify that the correct arguments were passed to modernFind().
         final captured = verify(
-          () => mockCollection.find(captureAny()),
-        ).captured.first;
-        expect(captured, isA<SelectorBuilder>());
+          () => mockCollection.modernFind(
+            filter: captureAny(named: 'filter'),
+            sort: captureAny(named: 'sort'),
+            limit: captureAny(named: 'limit'),
+            skip: any(named: 'skip'),
+            projection: any(named: 'projection'),
+            hint: any(named: 'hint'),
+            hintDocument: any(named: 'hintDocument'),
+            findOptions: any(named: 'findOptions'),
+            rawOptions: any(named: 'rawOptions'),
+          ),
+        ).captured;
 
-        final builder = captured as SelectorBuilder;
-        // Check that the default sort order by _id is applied.
-        expect(builder.map, containsPair('orderby', {'_id': 1}));
-        // Check that the limit is the default (20) + 1 for hasMore check.
-        expect(builder.paramLimit, 21);
+        final filterArg = captured[0] as Map<String, dynamic>?;
+        final sortArg = captured[1] as Map<String, int>?;
+        final limitArg = captured[2] as int?;
+
+        expect(filterArg, isEmpty);
+        expect(sortArg, {'_id': 1});
+        expect(limitArg, 21);
       });
 
       test('should apply userId filter correctly', () async {
@@ -489,12 +510,19 @@ void main() {
 
         // Assert
         final captured = verify(
-          () => mockCollection.find(captureAny()),
-        ).captured.first;
-        final builder = captured as SelectorBuilder;
-
-        // The raw selector is inside the map of the builder
-        expect(builder.map, containsPair('userId', userId));
+          () => mockCollection.modernFind(
+            filter: captureAny(named: 'filter'),
+            sort: any(named: 'sort'),
+            limit: any(named: 'limit'),
+            skip: any(named: 'skip'),
+            projection: any(named: 'projection'),
+            hint: any(named: 'hint'),
+            hintDocument: any(named: 'hintDocument'),
+            findOptions: any(named: 'findOptions'),
+            rawOptions: any(named: 'rawOptions'),
+          ),
+        ).captured;
+        expect(captured.first, {'userId': userId});
       });
 
       test('should apply complex filter correctly', () async {
@@ -510,11 +538,21 @@ void main() {
 
         // Assert
         final captured = verify(
-          () => mockCollection.find(captureAny()),
-        ).captured.first;
-        final builder = captured as SelectorBuilder;
-
-        expect(builder.map, containsPair('price', {'\$gte': 12.0}));
+          () => mockCollection.modernFind(
+            filter: captureAny(named: 'filter'),
+            sort: any(named: 'sort'),
+            limit: any(named: 'limit'),
+            skip: any(named: 'skip'),
+            projection: any(named: 'projection'),
+            hint: any(named: 'hint'),
+            hintDocument: any(named: 'hintDocument'),
+            findOptions: any(named: 'findOptions'),
+            rawOptions: any(named: 'rawOptions'),
+          ),
+        ).captured;
+        expect(captured.first, {
+          'price': {r'$gte': 12.0},
+        });
       });
 
       test('should combine userId and complex filter correctly', () async {
@@ -531,12 +569,22 @@ void main() {
 
         // Assert
         final captured = verify(
-          () => mockCollection.find(captureAny()),
-        ).captured.first;
-        final builder = captured as SelectorBuilder;
-
-        expect(builder.map, containsPair('userId', userId));
-        expect(builder.map, containsPair('price', {'\$gte': 12.0}));
+          () => mockCollection.modernFind(
+            filter: captureAny(named: 'filter'),
+            sort: any(named: 'sort'),
+            limit: any(named: 'limit'),
+            skip: any(named: 'skip'),
+            projection: any(named: 'projection'),
+            hint: any(named: 'hint'),
+            hintDocument: any(named: 'hintDocument'),
+            findOptions: any(named: 'findOptions'),
+            rawOptions: any(named: 'rawOptions'),
+          ),
+        ).captured;
+        expect(captured.first, {
+          'userId': userId,
+          'price': {r'$gte': 12.0},
+        });
       });
 
       test('should apply a single sort option correctly', () async {
@@ -550,15 +598,19 @@ void main() {
 
         // Assert
         final captured = verify(
-          () => mockCollection.find(captureAny()),
-        ).captured.first;
-        final builder = captured as SelectorBuilder;
-
-        // The sort options are in the 'orderby' key of the builder's map
-        expect(
-          builder.map,
-          containsPair('orderby', {'price': -1, '_id': 1}),
-        );
+          () => mockCollection.modernFind(
+            filter: any(named: 'filter'),
+            sort: captureAny(named: 'sort'),
+            limit: any(named: 'limit'),
+            skip: any(named: 'skip'),
+            projection: any(named: 'projection'),
+            hint: any(named: 'hint'),
+            hintDocument: any(named: 'hintDocument'),
+            findOptions: any(named: 'findOptions'),
+            rawOptions: any(named: 'rawOptions'),
+          ),
+        ).captured;
+        expect(captured.first, {'price': -1, '_id': 1});
       });
 
       test('should apply multiple sort options correctly', () async {
@@ -575,14 +627,19 @@ void main() {
 
         // Assert
         final captured = verify(
-          () => mockCollection.find(captureAny()),
-        ).captured.first;
-        final builder = captured as SelectorBuilder;
-
-        expect(
-          builder.map,
-          containsPair('orderby', {'name': 1, 'price': -1, '_id': 1}),
-        );
+          () => mockCollection.modernFind(
+            filter: any(named: 'filter'),
+            sort: captureAny(named: 'sort'),
+            limit: any(named: 'limit'),
+            skip: any(named: 'skip'),
+            projection: any(named: 'projection'),
+            hint: any(named: 'hint'),
+            hintDocument: any(named: 'hintDocument'),
+            findOptions: any(named: 'findOptions'),
+            rawOptions: any(named: 'rawOptions'),
+          ),
+        ).captured;
+        expect(captured.first, {'name': 1, 'price': -1, '_id': 1});
       });
 
       test(
@@ -601,14 +658,19 @@ void main() {
 
           // Assert
           final captured = verify(
-            () => mockCollection.find(captureAny()),
-          ).captured.first;
-          final builder = captured as SelectorBuilder;
-
-          expect(
-            builder.map,
-            containsPair('orderby', {'price': 1, '_id': -1}),
-          );
+            () => mockCollection.modernFind(
+              filter: any(named: 'filter'),
+              sort: captureAny(named: 'sort'),
+              limit: any(named: 'limit'),
+              skip: any(named: 'skip'),
+              projection: any(named: 'projection'),
+              hint: any(named: 'hint'),
+              hintDocument: any(named: 'hintDocument'),
+              findOptions: any(named: 'findOptions'),
+              rawOptions: any(named: 'rawOptions'),
+            ),
+          ).captured;
+          expect(captured.first, {'price': 1, '_id': -1});
         },
       );
 
@@ -634,10 +696,19 @@ void main() {
             );
 
             final captured = verify(
-              () => mockCollection.find(captureAny()),
-            ).captured.first;
-            final builder = captured as SelectorBuilder;
-            expect(builder.paramLimit, 4); // limit (3) + 1
+              () => mockCollection.modernFind(
+                filter: any(named: 'filter'),
+                sort: any(named: 'sort'),
+                limit: captureAny(named: 'limit'),
+                skip: any(named: 'skip'),
+                projection: any(named: 'projection'),
+                hint: any(named: 'hint'),
+                hintDocument: any(named: 'hintDocument'),
+                findOptions: any(named: 'findOptions'),
+                rawOptions: any(named: 'rawOptions'),
+              ),
+            ).captured;
+            expect(captured.first, 4); // limit (3) + 1
           },
         );
 
@@ -720,27 +791,28 @@ void main() {
           expect(secondResponse.data.items[1].name, 'Product 3');
 
           // Verify the findOne call for the cursor document
-          verify(
-            () => mockCollection.findOne(
-              any(
-                that: isA<SelectorBuilder>().having(
-                  (s) => s.map,
-                  'map',
-                  {
-                    r'$query': {'_id': cursorId},
-                  },
-                ),
-              ),
-            ),
-          ).called(1);
+          final capturedFindOne =
+              verify(() => mockCollection.findOne(captureAny())).captured.first
+                  as Map<String, dynamic>;
+          expect(capturedFindOne['_id'], cursorId);
 
           // Verify the main find call contains the correct cursor logic
           final captured = verify(
-            () => mockCollection.find(captureAny()),
-          ).captured.last;
-          final builder = captured as SelectorBuilder;
-          expect(builder.map, contains(r'$or'));
-          expect(builder.map[r'$or'], [
+            () => mockCollection.modernFind(
+              filter: captureAny(named: 'filter'),
+              sort: any(named: 'sort'),
+              limit: any(named: 'limit'),
+              skip: any(named: 'skip'),
+              projection: any(named: 'projection'),
+              hint: any(named: 'hint'),
+              hintDocument: any(named: 'hintDocument'),
+              findOptions: any(named: 'findOptions'),
+              rawOptions: any(named: 'rawOptions'),
+            ),
+          ).captured;
+          final filterArg = captured.last as Map<String, dynamic>;
+          expect(filterArg, contains(r'$or'));
+          expect(filterArg[r'$or'], [
             {
               '_id': {r'$gt': cursorId},
             },
@@ -815,12 +887,22 @@ void main() {
 
             // Assert
             final captured = verify(
-              () => mockCollection.find(captureAny()),
-            ).captured.last;
-            final builder = captured as SelectorBuilder;
+              () => mockCollection.modernFind(
+                filter: captureAny(named: 'filter'),
+                sort: any(named: 'sort'),
+                limit: any(named: 'limit'),
+                skip: any(named: 'skip'),
+                projection: any(named: 'projection'),
+                hint: any(named: 'hint'),
+                hintDocument: any(named: 'hintDocument'),
+                findOptions: any(named: 'findOptions'),
+                rawOptions: any(named: 'rawOptions'),
+              ),
+            ).captured;
+            final filterArg = captured.last as Map<String, dynamic>;
 
             // Verify the complex $or condition for multi-field sort
-            expect(builder.map[r'$or'], [
+            expect(filterArg[r'$or'], [
               {
                 'price': {r'$lt': 50.0},
               },
@@ -840,7 +922,17 @@ void main() {
         test('should throw ServerException on database error', () async {
           // Arrange
           when(
-            () => mockCollection.find(any()),
+            () => mockCollection.modernFind(
+              filter: any(named: 'filter'),
+              sort: any(named: 'sort'),
+              limit: any(named: 'limit'),
+              skip: any(named: 'skip'),
+              projection: any(named: 'projection'),
+              hint: any(named: 'hint'),
+              hintDocument: any(named: 'hintDocument'),
+              findOptions: any(named: 'findOptions'),
+              rawOptions: any(named: 'rawOptions'),
+            ),
           ).thenThrow(Exception('DB connection failed'));
 
           // Act & Assert
