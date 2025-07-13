@@ -126,7 +126,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     }
     final cursorObjectId = ObjectId.fromHexString(cursorId);
 
-    final cursorDoc = await _collection.findOne(where.id(cursorObjectId));
+    final cursorDoc = await _collection.findOne({'_id': cursorObjectId});
     if (cursorDoc == null) {
       _logger.warning('Cursor document with id $cursorId not found.');
       throw const BadRequestException('Cursor document not found.');
