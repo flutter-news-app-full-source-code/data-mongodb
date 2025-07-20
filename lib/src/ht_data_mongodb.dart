@@ -143,16 +143,25 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       return {};
     }
 
-    // If there's only one filter condition, we don't need to wrap it in $and.
-    if (filter.length == 1) {
-      _logger.finer('Built MongoDB selector: $filter');
-      return filter;
+    // Create a mutable copy to work with.
+    final processedFilter = Map<String, dynamic>.from(filter);
+
+    // Check for the special 'q' parameter for text search.
+    if (processedFilter.containsKey('q')) {
+      final searchTerm = processedFilter.remove('q');
+      // Add the MongoDB text search operator.
+      // This assumes a text index exists on the collection.
+      processedFilter[r'$text'] = {r'$search': searchTerm};
     }
 
-    // If there are multiple conditions, wrap them in an explicit $and operator
-    // to ensure they are all applied correctly. This makes the query more
-    // robust and avoids potential ambiguity.
-    final andConditions = filter.entries
+    // If there's only one filter condition after processing, return it directly.
+    if (processedFilter.length == 1) {
+      _logger.finer('Built MongoDB selector: $processedFilter');
+      return processedFilter;
+    }
+
+    // If there are multiple conditions, wrap them in an explicit $and operator.
+    final andConditions = processedFilter.entries
         .map((entry) => {entry.key: entry.value})
         .toList();
 
