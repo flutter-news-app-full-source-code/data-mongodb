@@ -243,11 +243,11 @@ class HtDataMongodb<T> implements HtDataClient<T> {
           'Failed to create item: ${writeResult.writeError?.errmsg}',
         );
       }
-      _logger.finer('insertOne successful for _id: ${doc['_id']}');
+      _logger..finer('insertOne successful for _id: ${doc['_id']}')
 
       // Best Practice: After insertion, fetch the canonical document from the
       // database to ensure the returned data is exactly what was stored.
-      _logger.finer('Fetching newly created document for verification...');
+      ..finer('Fetching newly created document for verification...');
       final createdDoc = await _collection.findOne({'_id': doc['_id']});
       if (createdDoc == null) {
         _logger.severe(
