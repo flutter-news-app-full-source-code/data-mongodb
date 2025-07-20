@@ -138,13 +138,25 @@ class HtDataMongodb<T> implements HtDataClient<T> {
   /// Note: The `userId` parameter is intentionally ignored here, as this
   /// schema does not use a `userId` field for scoping.
   Map<String, dynamic> _buildSelector(Map<String, dynamic>? filter) {
-    final selector = <String, dynamic>{};
-
-    if (filter != null) {
-      // The filter map is assumed to be in valid MongoDB query format,
-      // so we can merge it directly.
-      selector.addAll(filter);
+    if (filter == null || filter.isEmpty) {
+      _logger.finer('Built MongoDB selector: {}');
+      return {};
     }
+
+    // If there's only one filter condition, we don't need to wrap it in $and.
+    if (filter.length == 1) {
+      _logger.finer('Built MongoDB selector: $filter');
+      return filter;
+    }
+
+    // If there are multiple conditions, wrap them in an explicit $and operator
+    // to ensure they are all applied correctly. This makes the query more
+    // robust and avoids potential ambiguity.
+    final andConditions = filter.entries
+        .map((entry) => {entry.key: entry.value})
+        .toList();
+
+    final selector = {r'$and': andConditions};
 
     _logger.finer('Built MongoDB selector: $selector');
     return selector;
