@@ -12,6 +12,8 @@ A production-ready MongoDB implementation of the `HtDataClient` interface, desig
 
 It translates the abstract, high-level data requests from the `HtDataClient` interface—including rich filters, multi-field sorting, and cursor-based pagination—into native, efficient MongoDB queries.
 
+A key feature of this implementation is its **ID management strategy**. It ensures that the application layer remains the source of truth for a document's ID by mapping the model's `id` string to the database's `_id` field. This is crucial for correctly handling both global documents (like headlines) and user-owned documents (like settings), where the document's `_id` must match the user's ID. For a deeper explanation, see the documentation within the `HtDataMongodb` class.
+
 ## Getting Started
 
 This package is intended to be used as a dependency in backend services (like a Dart Frog API) or applications that connect directly to MongoDB.
@@ -43,12 +45,11 @@ Then run `dart pub get` or `flutter pub get`.
 - Implements the `HtDataClient<T>` interface from `package:ht_data_client`.
 - Includes `MongoDbConnectionManager` for robust connection lifecycle management.
 - Translates `readAll` parameters (`filter`, `sort`, `pagination`) into native MongoDB queries.
-- Automatically handles the mapping between your models' `String id` and MongoDB's `ObjectId _id`.
-- Supports both user-scoped and global data operations.
+- **Handles ID Management**: Faithfully maps the application-level `id` string to the database `_id`, preserving data integrity for all document types.
+- **Supports Multiple Data Models**: Correctly handles both global documents (e.g., `Headline`) and user-owned documents (e.g., `UserAppSettings`) where the document `_id` serves as the foreign key to the user.
 - Throws standard exceptions from `package:ht_shared` for consistent error handling.
 - Implements `count` for efficient document counting.
-- Implements `aggregate` to execute powerful, server-side aggregation
-  pipelines, automatically scoping to a `userId` when provided.
+- Implements `aggregate` to execute powerful, server-side aggregation pipelines.
 
 ## Usage
 
