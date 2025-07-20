@@ -1,3 +1,5 @@
+// ignore_for_file: cascade_invocations
+
 import 'package:ht_data_client/ht_data_client.dart';
 import 'package:ht_data_mongodb/src/mongo_db_connection_manager.dart';
 import 'package:ht_shared/ht_shared.dart';
@@ -66,6 +68,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     required String modelName,
     required FromJson<T> fromJson,
     required ToJson<T> toJson,
+    this.searchableFields,
     Logger? logger,
   })  : _connectionManager = connectionManager,
         _modelName = modelName,
@@ -74,6 +77,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
         _logger = logger ?? Logger('HtDataMongodb<$T>');
 
   final MongoDbConnectionManager _connectionManager;
+  final List<String>? searchableFields;
   final String _modelName;
   final FromJson<T> _fromJson;
   final ToJson<T> _toJson;
@@ -147,11 +151,39 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     final processedFilter = Map<String, dynamic>.from(filter);
 
     // Check for the special 'q' parameter for text search.
-    if (processedFilter.containsKey('q')) {
-      final searchTerm = processedFilter.remove('q');
-      // Add the MongoDB text search operator.
-      // This assumes a text index exists on the collection.
-      processedFilter[r'$text'] = {r'$search': searchTerm};
+    if (processedFilter.containsKey('q') &&
+        searchableFields != null &&
+        searchableFields!.isNotEmpty) {
+      final searchTerm = processedFilter.remove('q') as String;
+      final searchConditions = <Map<String, dynamic>>[];
+
+      for (final field in searchableFields!) {
+        searchConditions.add({
+          field: {r'$regex': searchTerm, r'$options': 'i'},
+        });
+      }
+
+      // If there's already an '$and' operator, add the '$or' to it.
+      // Otherwise, create a new '$and' that includes the '$or'.
+      if (processedFilter.containsKey(r'$and')) {
+        final existingAnd = processedFilter[r'$and'] as List;
+        existingAnd.add({r'$or': searchConditions});
+      } else {
+        // If there are other filters, they need to be combined with the search.
+        final otherFilters = Map<String, dynamic>.from(processedFilter);
+        processedFilter.clear();
+        processedFilter[r'$and'] = [
+          otherFilters,
+          {r'$or': searchConditions}
+        ];
+      }
+    } else if (processedFilter.containsKey('q')) {
+      // If 'q' is present but no searchable fields are configured,
+      // remove it to prevent errors.
+      processedFilter.remove('q');
+      _logger.warning(
+        'Search term "q" was provided, but no searchableFields are configured for $_modelName. Ignoring search term.',
+      );
     }
 
     // If there's only one filter condition after processing, return it directly.
