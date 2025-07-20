@@ -50,6 +50,7 @@ Then run `dart pub get` or `flutter pub get`.
 - Throws standard exceptions from `package:ht_shared` for consistent error handling.
 - Implements `count` for efficient document counting.
 - Implements `aggregate` to execute powerful, server-side aggregation pipelines.
+- **Partial Text Search**: Translates a `q` filter parameter into a case-insensitive (`$regex`) across designated searchable fields.
 
 ## Usage
 
@@ -93,9 +94,19 @@ void main() async {
       modelName: 'products', // The name of the MongoDB collection.
       fromJson: Product.fromJson,
       toJson: (product) => product.toJson(),
+      searchableFields: ['name'], // Designate 'name' for partial-text search.
     );
 
     // 5. Use the client to perform operations.
+    // Example: Forgiving search for products with "pro" in their name.
+    final searchResponse = await client.readAll(
+      filter: {'q': 'pro'},
+      pagination: const PaginationOptions(limit: 5),
+    );
+    print('\nFound ${searchResponse.data.items.length} products matching "pro":');
+    for (final product in searchResponse.data.items) {
+      print('- ${product.name}');
+    }
     final filter = {
       'price': {r'$gte': 10.0} // Find products with price >= 10.0
     };
