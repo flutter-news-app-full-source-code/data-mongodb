@@ -10,6 +10,54 @@ import 'package:uuid/uuid.dart';
 ///
 /// This client interacts with a MongoDB database to perform CRUD operations,
 /// translating the generic data client requests into native MongoDB queries.
+///
+/// ### Core Design: ID Management Strategy
+///
+/// A critical responsibility of this client is to correctly manage the mapping
+/// between the application-level model `id` (a `String`, typically a UUID
+/// represented as a 24-character hex string) and the database-level primary
+/// key `_id` (an `ObjectId`). This client ensures that the application layer
+/// is the **source of truth** for a document's ID.
+///
+/// This is handled by the `_prepareDocumentForInsertionOrUpdate` helper, which
+/// takes the string `id` from a model and converts it into a deterministic
+/// `ObjectId` to be used as the `_id` in the database.
+///
+/// This strategy is vital for two key use cases:
+///
+/// 1.  **User-Owned Documents (e.g., `UserAppSettings`):**
+///     When a new user is created, the `AuthService` creates a `UserAppSettings`
+///     object and explicitly sets its `id` to be the same as the `user.id`.
+///     This client respects that `id`, ensuring the `UserAppSettings` document
+///     is saved in the database with its `_id` being the `user.id`. This direct
+///     ID relationship is what enables ownership checks in the API's
+///     authorization middleware.
+///
+/// 2.  **Global Documents (e.g., `Headline`, `Topic`):**
+///     When a global entity is created (e.g., by an admin or from a fixture),
+///     the application layer assigns it a unique ID. This client
+///     ensures that this specific ID is used as the `_id` in the database,
+///     maintaining data integrity and relationships across collections.
+///
+/// ### The `userId` Parameter: A Critical Clarification
+///
+/// The [HtDataClient] interface, being generic, includes an optional `userId`
+/// parameter on its methods (e.g., `create({required T item, String? userId})`).
+/// This is to support data schemas where documents might have a `userId` field.
+///
+/// **However, for this specific MongoDB implementation, that is NOT the case.**
+///
+/// User-owned documents are identified by their `_id` matching the user's ID.
+/// There is no separate `userId` field in the database schema. Therefore, this
+/// implementation **intentionally and correctly IGNORES the `userId` parameter**
+/// in all of its database query logic.
+///
+/// Access control and ownership checks are handled entirely **upstream** by the
+/// API's middleware layer before a request ever reaches this data client. The
+/// middleware is responsible for checking if an authenticated user has the
+/// permission to access a document with a specific ID. This client's only job
+/// is to faithfully execute the resulting database operation (e.g., "fetch the
+/// document with this `_id`").
 /// {@endtemplate}
 class HtDataMongodb<T> implements HtDataClient<T> {
   /// {@macro ht_data_mongodb}
@@ -19,11 +67,11 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     required FromJson<T> fromJson,
     required ToJson<T> toJson,
     Logger? logger,
-  }) : _connectionManager = connectionManager,
-       _modelName = modelName,
-       _fromJson = fromJson,
-       _toJson = toJson,
-       _logger = logger ?? Logger('HtDataMongodb<$T>');
+  })  : _connectionManager = connectionManager,
+        _modelName = modelName,
+        _fromJson = fromJson,
+        _toJson = toJson,
+        _logger = logger ?? Logger('HtDataMongodb<$T>');
 
   final MongoDbConnectionManager _connectionManager;
   final String _modelName;
@@ -41,38 +89,56 @@ class HtDataMongodb<T> implements HtDataClient<T> {
   /// (an `ObjectId`) into the `id` (a `String`) expected by the data models.
   T _mapMongoDocumentToModel(Map<String, dynamic> doc) {
     // MongoDB uses `_id` with ObjectId, our models use `id` with String.
-    // We create a copy to avoid modifying the original map, which could cause
-    // issues when determining the next cursor.
+    // We create a copy to avoid modifying the original map.
     final newDoc = Map<String, dynamic>.from(doc);
     newDoc['id'] = (newDoc['_id'] as ObjectId).oid;
-    // The linter incorrectly flags this as a candidate for a cascade.
-    // ignore: cascade_invocations
     return _fromJson(newDoc);
   }
 
-  /// Maps a model of type [T] to a document suitable for MongoDB.
+  /// Prepares a model of type [T] for insertion or update in MongoDB.
   ///
-  /// This function prepares the data for insertion by removing the `id` field,
-  /// as MongoDB will automatically generate the `_id` field.
-  Map<String, dynamic> _mapModelToMongoDocument(T item) {
-    // The `id` field in our model is not part of the MongoDB document schema,
-    // as MongoDB uses `_id`. We remove it before insertion/update.
-    return _toJson(item)..remove('id');
+  /// This is a crucial helper that enforces the ID management strategy. It:
+  /// 1. Converts the model to a JSON map.
+  /// 2. Extracts the `id` field from the map.
+  /// 3. **Removes** the `id` field from the map, as it's not part of the
+  ///    database schema.
+  /// 4. **Adds** an `_id` field, setting its value to an `ObjectId` created
+  ///    from the model's original `id` string.
+  ///
+  /// This ensures the application-provided ID becomes the document's primary
+  /// key in the database.
+  Map<String, dynamic> _prepareDocumentForInsertionOrUpdate(T item) {
+    final doc = _toJson(item);
+    final id = doc['id'] as String?;
+
+    if (id == null || id.isEmpty) {
+      // This should not happen if models are validated correctly upstream.
+      throw const BadRequestException('Model is missing a required "id" field.');
+    }
+
+    // Ensure the ID is a valid hex string for ObjectId conversion.
+    if (!ObjectId.isValidHexId(id)) {
+      throw BadRequestException(
+        'The provided model ID "$id" is not a valid 24-character hex string '
+        'and cannot be used as a MongoDB ObjectId.',
+      );
+    }
+
+    doc.remove('id');
+    doc['_id'] = ObjectId.fromHexString(id);
+
+    return doc;
   }
 
-  /// Builds a MongoDB query selector from the provided filter and userId.
+  /// Builds a MongoDB query selector from the provided filter.
   ///
   /// The [filter] map is expected to be in a format compatible with MongoDB's
   /// query syntax (e.g., using operators like `$in`, `$gte`).
-  Map<String, dynamic> _buildSelector(
-    Map<String, dynamic>? filter,
-    String? userId,
-  ) {
+  ///
+  /// Note: The `userId` parameter is intentionally ignored here, as this
+  /// schema does not use a `userId` field for scoping.
+  Map<String, dynamic> _buildSelector(Map<String, dynamic>? filter) {
     final selector = <String, dynamic>{};
-
-    if (userId != null) {
-      selector['userId'] = userId;
-    }
 
     if (filter != null) {
       // The filter map is assumed to be in valid MongoDB query format,
@@ -162,23 +228,38 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     required T item,
     String? userId,
   }) async {
-    _logger.fine('Creating item in $_modelName, userId: $userId');
+    _logger.fine('Attempting to create item in collection: $_modelName...');
     try {
-      final doc = _mapModelToMongoDocument(item);
-      if (userId != null) {
-        doc['userId'] = userId;
-      }
+      final doc = _prepareDocumentForInsertionOrUpdate(item);
+      _logger.finer('Prepared document for insertion with _id: ${doc['_id']}');
 
       final writeResult = await _collection.insertOne(doc);
 
-      if (!writeResult.isSuccess || writeResult.document == null) {
-        _logger.severe('MongoDB create failed: ${writeResult.writeError}');
+      if (!writeResult.isSuccess) {
+        _logger.severe(
+          'MongoDB insertOne failed for $_modelName: ${writeResult.writeError}',
+        );
         throw ServerException(
           'Failed to create item: ${writeResult.writeError?.errmsg}',
         );
       }
+      _logger.finer('insertOne successful for _id: ${doc['_id']}');
 
-      final createdItem = _mapMongoDocumentToModel(writeResult.document!);
+      // Best Practice: After insertion, fetch the canonical document from the
+      // database to ensure the returned data is exactly what was stored.
+      _logger.finer('Fetching newly created document for verification...');
+      final createdDoc = await _collection.findOne({'_id': doc['_id']});
+      if (createdDoc == null) {
+        _logger.severe(
+          'Post-create verification failed: Document with _id ${doc['_id']} not found.',
+        );
+        throw const ServerException(
+          'Failed to verify item creation in database.',
+        );
+      }
+      _logger.fine('Successfully created and verified document: ${doc['_id']}');
+
+      final createdItem = _mapMongoDocumentToModel(createdDoc);
       return SuccessApiResponse(
         data: createdItem,
         metadata: ResponseMetadata(
@@ -186,8 +267,10 @@ class HtDataMongodb<T> implements HtDataClient<T> {
           timestamp: DateTime.now(),
         ),
       );
+    } on HtHttpException {
+      rethrow;
     } on Exception catch (e, s) {
-      _logger.severe('MongoDartError during create', e, s);
+      _logger.severe('Error during create in $_modelName', e, s);
       throw ServerException('Database error during create: $e');
     }
   }
@@ -195,7 +278,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
   @override
   Future<void> delete({required String id, String? userId}) async {
     _logger.fine(
-      'Deleting item with id: $id from $_modelName, userId: $userId',
+      'Attempting to delete item with id: $id from collection: $_modelName...',
     );
     try {
       if (!ObjectId.isValidHexId(id)) {
@@ -205,25 +288,24 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       final selector = <String, dynamic>{
         '_id': ObjectId.fromHexString(id),
       };
-      if (userId != null) {
-        selector['userId'] = userId;
-      }
+      _logger.finer('Using delete selector: $selector');
 
       final writeResult = await _collection.deleteOne(selector);
 
       if (writeResult.nRemoved == 0) {
         _logger.warning(
-          'Delete FAILED: Item with id "$id" not found in $_modelName for userId: $userId',
+          'Delete FAILED: Item with id "$id" not found in $_modelName.',
         );
         throw NotFoundException(
           'Item with ID "$id" not found for deletion in $_modelName.',
         );
       }
+      _logger.fine('Successfully deleted document with id: $id');
       // No return value on success
     } on HtHttpException {
       rethrow;
     } on Exception catch (e, s) {
-      _logger.severe('MongoDartError during delete', e, s);
+      _logger.severe('Error during delete in $_modelName', e, s);
       throw ServerException('Database error during delete: $e');
     }
   }
@@ -233,7 +315,9 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     required String id,
     String? userId,
   }) async {
-    _logger.fine('Reading item with id: $id from $_modelName, userId: $userId');
+    _logger.fine(
+      'Attempting to read item with id: $id from collection: $_modelName...',
+    );
     try {
       // Validate that the ID is a valid ObjectId hex string before querying.
       if (!ObjectId.isValidHexId(id)) {
@@ -243,22 +327,19 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       final selector = <String, dynamic>{
         '_id': ObjectId.fromHexString(id),
       };
-
-      if (userId != null) {
-        selector['userId'] = userId;
-      }
+      _logger.finer('Using read selector: $selector');
 
       final doc = await _collection.findOne(selector);
 
       if (doc == null) {
         _logger.warning(
-          'Read FAILED: Item with id "$id" not found in $_modelName for '
-          'userId: $userId',
+          'Read FAILED: Item with id "$id" not found in $_modelName.',
         );
         throw NotFoundException(
           'Item with ID "$id" not found in $_modelName.',
         );
       }
+      _logger.fine('Successfully read document with id: $id');
 
       final item = _mapMongoDocumentToModel(doc);
       return SuccessApiResponse(
@@ -271,7 +352,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     } on HtHttpException {
       rethrow;
     } on Exception catch (e, s) {
-      _logger.severe('MongoDartError during read', e, s);
+      _logger.severe('Error during read in $_modelName', e, s);
       throw ServerException('Database error during read: $e');
     }
   }
@@ -284,11 +365,11 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     List<SortOption>? sort,
   }) async {
     _logger.fine(
-      'Reading all from $_modelName with filter: $filter, pagination: '
-      '$pagination, sort: $sort, userId: $userId',
+      'Attempting to read all from collection: $_modelName with filter: '
+      '$filter, pagination: $pagination, sort: $sort',
     );
     try {
-      final selector = _buildSelector(filter, userId);
+      final selector = _buildSelector(filter);
       final sortBuilder = _buildSortBuilder(sort);
       final limit = pagination?.limit ?? 20;
 
@@ -308,6 +389,9 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       final hasMore = findResult.length > limit;
       // Take only the requested number of items for the final list.
       final documentsForPage = findResult.take(limit).toList();
+      _logger.finer(
+        'Query returned ${findResult.length} docs, taking $limit for page. HasMore: $hasMore',
+      );
 
       final items = documentsForPage.map(_mapMongoDocumentToModel).toList();
 
@@ -332,7 +416,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     } on HtHttpException {
       rethrow;
     } on Exception catch (e, s) {
-      _logger.severe('MongoDartError during readAll', e, s);
+      _logger.severe('Error during readAll in $_modelName', e, s);
       throw ServerException('Database error during readAll: $e');
     }
   }
@@ -344,7 +428,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     String? userId,
   }) async {
     _logger.fine(
-      'Updating item with id: $id in $_modelName, userId: $userId',
+      'Attempting to update item with id: $id in collection: $_modelName...',
     );
     try {
       if (!ObjectId.isValidHexId(id)) {
@@ -354,30 +438,33 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       final selector = <String, dynamic>{
         '_id': ObjectId.fromHexString(id),
       };
-      if (userId != null) {
-        selector['userId'] = userId;
-      }
+      _logger.finer('Using update selector: $selector');
 
-      final docToUpdate = _mapModelToMongoDocument(item);
-      if (userId != null) {
-        docToUpdate['userId'] = userId;
-      }
+      // Prepare the document for update. Note that the `_id` from the item
+      // is ignored here, as the update is targeted by the `id` parameter.
+      final docToUpdate = _toJson(item)..remove('id');
+      _logger.finer('Update payload: $docToUpdate');
 
-      final writeResult = await _collection.replaceOne(selector, docToUpdate);
+      // Use findAndModify for an atomic update and return operation.
+      final result = await _collection.findAndModify(
+        query: selector,
+        update: {r'$set': docToUpdate},
+        returnNew: true, // Return the document AFTER the update.
+      );
 
-      if (writeResult.nModified == 0) {
+      if (result == null) {
         _logger.warning(
-          'Update FAILED: Item with id "$id" not found in $_modelName for '
-          'userId: $userId',
+          'Update FAILED: Item with id "$id" not found in $_modelName.',
         );
         throw NotFoundException(
           'Item with ID "$id" not found for update in $_modelName.',
         );
       }
+      _logger.fine('Successfully updated document with id: $id');
 
-      // The updated item is the one we passed in.
+      final updatedItem = _mapMongoDocumentToModel(result);
       return SuccessApiResponse(
-        data: item,
+        data: updatedItem,
         metadata: ResponseMetadata(
           requestId: _uuid.v4(),
           timestamp: DateTime.now(),
@@ -386,7 +473,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     } on HtHttpException {
       rethrow;
     } on Exception catch (e, s) {
-      _logger.severe('MongoDartError during update', e, s);
+      _logger.severe('Error during update in $_modelName', e, s);
       throw ServerException('Database error during update: $e');
     }
   }
@@ -397,11 +484,12 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     Map<String, dynamic>? filter,
   }) async {
     _logger.fine(
-      'Counting items in $_modelName with filter: $filter, userId: $userId',
+      'Attempting to count items in collection: $_modelName with filter: $filter...',
     );
     try {
-      final selector = _buildSelector(filter, userId);
+      final selector = _buildSelector(filter);
       final count = await _collection.count(selector);
+      _logger.fine('Count result: $count');
 
       return SuccessApiResponse(
         data: count,
@@ -411,7 +499,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
         ),
       );
     } on Exception catch (e, s) {
-      _logger.severe('MongoDartError during count', e, s);
+      _logger.severe('Error during count in $_modelName', e, s);
       throw ServerException('Database error during count: $e');
     }
   }
@@ -422,24 +510,20 @@ class HtDataMongodb<T> implements HtDataClient<T> {
     String? userId,
   }) async {
     _logger.fine(
-      'Aggregating in $_modelName with pipeline: $pipeline, userId: $userId',
+      'Attempting to aggregate in collection: $_modelName with pipeline: $pipeline...',
     );
     try {
       // Create a mutable copy with the correct type for the driver.
       final finalPipeline = List<Map<String, Object>>.from(pipeline);
 
-      // If a userId is provided, prepend a $match stage to scope the
-      // aggregation to that user's documents. This is a critical security
-      // and data-scoping measure.
-      if (userId != null) {
-        finalPipeline.insert(0, {
-          r'$match': {'userId': userId},
-        });
-      }
+      // Note: The `userId` parameter is intentionally not used to scope this
+      // query, as this schema does not have a `userId` field. Scoping should
+      // be handled by including a `$match` stage for the `_id` (if scoping
+      // to a specific user-owned document) or other fields directly in the
+      // provided pipeline by the caller.
 
-      final results = await _collection
-          .aggregateToStream(finalPipeline)
-          .toList();
+      final results =
+          await _collection.aggregateToStream(finalPipeline).toList();
 
       return SuccessApiResponse(
         data: results,
