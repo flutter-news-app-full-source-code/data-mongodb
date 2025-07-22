@@ -483,9 +483,12 @@ class DataMongodb<T> implements DataClient<T> {
       final selector = <String, dynamic>{'_id': ObjectId.fromHexString(id)};
       _logger.finer('Using update selector: $selector');
 
-      // Prepare the document for update. Note that the `_id` from the item
-      // is ignored here, as the update is targeted by the `id` parameter.
-      final docToUpdate = _toJson(item)..remove('id');
+      // Prepare the document for update. This ensures the item's ID is
+      // validated before proceeding.
+      final docToUpdate = _prepareDocumentForInsertionOrUpdate(item)
+        // The `_id` field must be removed from the update payload itself,
+        // as it's illegal to modify the `_id` of an existing document.
+        ..remove('_id');
       _logger.finer('Update payload: $docToUpdate');
 
       // Use findAndModify for an atomic update and return operation.
