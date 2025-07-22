@@ -1,8 +1,8 @@
 // ignore_for_file: inference_failure_on_function_invocation, use_raw_strings, avoid_redundant_argument_values
 
-import 'package:equatable/equatable.dart';
-import 'package:data_mongodb/data_mongodb.dart';
 import 'package:core/core.dart';
+import 'package:data_mongodb/data_mongodb.dart';
+import 'package:equatable/equatable.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:mongo_dart/mongo_dart.dart';
 import 'package:test/test.dart';
@@ -85,38 +85,50 @@ void main() {
         // Arrange
         final writeResult = MockWriteResult();
         when(() => writeResult.isSuccess).thenReturn(true);
-        when(() => writeResult.document).thenReturn(createdDoc);
-        when(
-          () => mockCollection.insertOne(any()),
-        ).thenAnswer((_) async => writeResult);
+        when(() => mockCollection.insertOne(any()))
+            .thenAnswer((_) async => writeResult);
+        // The implementation now fetches the doc after creation for verification
+        when(() => mockCollection.findOne(any()))
+            .thenAnswer((_) async => createdDoc);
 
         // Act
         final response = await client.create(item: newProduct);
 
         // Assert
         expect(response.data, newProduct);
-        verify(() => mockCollection.insertOne(newProductDoc)).called(1);
+        final capturedInsert =
+            verify(() => mockCollection.insertOne(captureAny())).captured.first
+                as Map<String, dynamic>;
+        // Remove the '_id' as it's generated and not part of the original doc
+        capturedInsert.remove('_id');
+        expect(capturedInsert, newProductDoc);
+        verify(() => mockCollection.findOne({'_id': createdDoc['_id']}))
+            .called(1);
       });
 
-      test('should create an item successfully with userId', () async {
+      test('should ignore userId and create an item successfully', () async {
         // Arrange
         const userId = 'user-123';
-        final newProductDocWithUser = {...newProductDoc, 'userId': userId};
-        final createdDocWithUser = {...createdDoc, 'userId': userId};
-
         final writeResult = MockWriteResult();
         when(() => writeResult.isSuccess).thenReturn(true);
-        when(() => writeResult.document).thenReturn(createdDocWithUser);
-        when(
-          () => mockCollection.insertOne(any()),
-        ).thenAnswer((_) async => writeResult);
+        when(() => mockCollection.insertOne(any()))
+            .thenAnswer((_) async => writeResult);
+        when(() => mockCollection.findOne(any()))
+            .thenAnswer((_) async => createdDoc);
 
         // Act
         final response = await client.create(item: newProduct, userId: userId);
 
         // Assert
         expect(response.data, newProduct);
-        verify(() => mockCollection.insertOne(newProductDocWithUser)).called(1);
+        final capturedInsert =
+            verify(() => mockCollection.insertOne(captureAny())).captured.first
+                as Map<String, dynamic>;
+        capturedInsert.remove('_id');
+        // The captured document should NOT contain the userId
+        expect(capturedInsert, newProductDoc);
+        verify(() => mockCollection.findOne({'_id': createdDoc['_id']}))
+            .called(1);
       });
 
       test('should throw ServerException on database error', () async {
@@ -137,14 +149,29 @@ void main() {
         final writeResult = MockWriteResult();
         when(() => writeResult.isSuccess).thenReturn(false);
         when(() => writeResult.document).thenReturn(null);
-        when(
-          () => mockCollection.insertOne(any()),
-        ).thenAnswer((_) async => writeResult);
+        when(() => mockCollection.insertOne(any()))
+            .thenAnswer((_) async => writeResult);
 
         // Act & Assert
         expect(
           () => client.create(item: newProduct),
           throwsA(isA<ServerException>()),
+        );
+      });
+
+      test('should throw BadRequestException for invalid model ID on create',
+          () {
+        // Arrange
+        final productWithInvalidId = Product(
+          id: 'invalid-id',
+          name: 'Invalid',
+          price: 0,
+        );
+
+        // Act & Assert
+        expect(
+          () => client.create(item: productWithInvalidId),
+          throwsA(isA<BadRequestException>()),
         );
       });
     });
@@ -179,23 +206,22 @@ void main() {
         expect(captured, {'_id': productId});
       });
 
-      test('should read an item successfully by id and userId', () async {
+      test('should ignore userId and read an item successfully by id',
+          () async {
         // Arrange
         const userId = 'user-123';
-        final productDocWithUser = {...productDoc, 'userId': userId};
-        when(
-          () => mockCollection.findOne(any()),
-        ).thenAnswer((_) async => productDocWithUser);
+        when(() => mockCollection.findOne(any()))
+            .thenAnswer((_) async => productDoc);
 
         // Act
         final response = await client.read(id: productId.oid, userId: userId);
 
         // Assert
         expect(response.data, product);
-        final captured = verify(
-          () => mockCollection.findOne(captureAny()),
-        ).captured.first;
-        expect(captured, {'_id': productId, 'userId': userId});
+        final captured =
+            verify(() => mockCollection.findOne(captureAny())).captured.first;
+        // The selector should NOT contain the userId
+        expect(captured, {'_id': productId});
       });
 
       test('should throw BadRequestException for invalid id format', () {
@@ -246,11 +272,15 @@ void main() {
 
       test('should update an item successfully', () async {
         // Arrange
-        final writeResult = MockWriteResult();
-        when(() => writeResult.nModified).thenReturn(1);
-        when(
-          () => mockCollection.replaceOne(any(), any()),
-        ).thenAnswer((_) async => writeResult);
+        final updatedDocFromDb = {
+          '_id': productId,
+          ...updatedProductDoc,
+        };
+        when(() => mockCollection.findAndModify(
+              query: any(named: 'query'),
+              update: any(named: 'update'),
+              returnNew: any(named: 'returnNew'),
+            )).thenAnswer((_) async => updatedDocFromDb);
 
         // Act
         final response = await client.update(
@@ -260,25 +290,28 @@ void main() {
 
         // Assert
         expect(response.data, updatedProduct);
-        final captured = verify(
-          () => mockCollection.replaceOne(captureAny(), captureAny()),
-        ).captured;
+        final captured = verify(() => mockCollection.findAndModify(
+              query: captureAny(named: 'query'),
+              update: captureAny(named: 'update'),
+              returnNew: captureAny(named: 'returnNew'),
+            )).captured;
         expect(captured[0], {'_id': productId});
-        expect(captured[1], updatedProductDoc);
+        expect(captured[1], {r'$set': updatedProductDoc});
+        expect(captured[2], isTrue);
       });
 
-      test('should update a user-scoped item successfully', () async {
+      test('should ignore userId and update an item successfully', () async {
         // Arrange
         const userId = 'user-123';
-        final updatedProductDocWithUser = {
+        final updatedDocFromDb = {
+          '_id': productId,
           ...updatedProductDoc,
-          'userId': userId,
         };
-        final writeResult = MockWriteResult();
-        when(() => writeResult.nModified).thenReturn(1);
-        when(
-          () => mockCollection.replaceOne(any(), any()),
-        ).thenAnswer((_) async => writeResult);
+        when(() => mockCollection.findAndModify(
+              query: any(named: 'query'),
+              update: any(named: 'update'),
+              returnNew: any(named: 'returnNew'),
+            )).thenAnswer((_) async => updatedDocFromDb);
 
         // Act
         final response = await client.update(
@@ -289,11 +322,15 @@ void main() {
 
         // Assert
         expect(response.data, updatedProduct);
-        final captured = verify(
-          () => mockCollection.replaceOne(captureAny(), captureAny()),
-        ).captured;
-        expect(captured[0], {'_id': productId, 'userId': userId});
-        expect(captured[1], updatedProductDocWithUser);
+        final captured = verify(() => mockCollection.findAndModify(
+              query: captureAny(named: 'query'),
+              update: captureAny(named: 'update'),
+              returnNew: captureAny(named: 'returnNew'),
+            )).captured;
+        // The query should NOT contain the userId
+        expect(captured[0], {'_id': productId});
+        expect(captured[1], {r'$set': updatedProductDoc});
+        expect(captured[2], isTrue);
       });
 
       test('should throw BadRequestException for invalid id format', () {
@@ -305,18 +342,22 @@ void main() {
           () => client.update(id: invalidId, item: updatedProduct),
           throwsA(isA<BadRequestException>()),
         );
-        verifyNever(() => mockCollection.replaceOne(any(), any()));
+        verifyNever(() => mockCollection.findAndModify(
+              query: any(named: 'query'),
+              update: any(named: 'update'),
+              returnNew: any(named: 'returnNew'),
+            ));
       });
 
       test(
         'should throw NotFoundException if item to update does not exist',
         () {
           // Arrange
-          final writeResult = MockWriteResult();
-          when(() => writeResult.nModified).thenReturn(0);
-          when(
-            () => mockCollection.replaceOne(any(), any()),
-          ).thenAnswer((_) async => writeResult);
+          when(() => mockCollection.findAndModify(
+                query: any(named: 'query'),
+                update: any(named: 'update'),
+                returnNew: any(named: 'returnNew'),
+              )).thenAnswer((_) async => null);
 
           // Act & Assert
           expect(
@@ -328,14 +369,32 @@ void main() {
 
       test('should throw ServerException on database error', () {
         // Arrange
-        when(
-          () => mockCollection.replaceOne(any(), any()),
-        ).thenThrow(Exception('DB connection failed'));
+        when(() => mockCollection.findAndModify(
+              query: any(named: 'query'),
+              update: any(named: 'update'),
+              returnNew: any(named: 'returnNew'),
+            )).thenThrow(Exception('DB connection failed'));
 
         // Act & Assert
         expect(
           () => client.update(id: productId.oid, item: updatedProduct),
           throwsA(isA<ServerException>()),
+        );
+      });
+
+      test('should throw BadRequestException for invalid model ID on update',
+          () {
+        // Arrange
+        final productWithInvalidId = Product(
+          id: 'invalid-id',
+          name: 'Invalid',
+          price: 0,
+        );
+
+        // Act & Assert
+        expect(
+          () => client.update(id: productId.oid, item: productWithInvalidId),
+          throwsA(isA<BadRequestException>()),
         );
       });
     });
@@ -361,23 +420,22 @@ void main() {
         expect(captured, {'_id': productId});
       });
 
-      test('should delete a user-scoped item successfully', () async {
+      test('should ignore userId and delete an item successfully', () async {
         // Arrange
         const userId = 'user-123';
         final writeResult = MockWriteResult();
         when(() => writeResult.nRemoved).thenReturn(1);
-        when(
-          () => mockCollection.deleteOne(any()),
-        ).thenAnswer((_) async => writeResult);
+        when(() => mockCollection.deleteOne(any()))
+            .thenAnswer((_) async => writeResult);
 
         // Act
         await client.delete(id: productId.oid, userId: userId);
 
         // Assert
-        final captured = verify(
-          () => mockCollection.deleteOne(captureAny()),
-        ).captured.first;
-        expect(captured, {'_id': productId, 'userId': userId});
+        final captured =
+            verify(() => mockCollection.deleteOne(captureAny())).captured.first;
+        // The selector should NOT contain the userId
+        expect(captured, {'_id': productId});
       });
 
       test('should throw BadRequestException for invalid id format', () {
@@ -492,7 +550,7 @@ void main() {
         expect(limitArg, 21);
       });
 
-      test('should apply userId filter correctly', () async {
+      test('should ignore userId and apply filter correctly', () async {
         // Arrange
         final productDocs = createProductDocs(2);
         setupMockFind(productDocs);
@@ -515,7 +573,8 @@ void main() {
             rawOptions: any(named: 'rawOptions'),
           ),
         ).captured;
-        expect(captured.first, {'userId': userId});
+        // The filter should be empty because userId is ignored
+        expect(captured.first, isEmpty);
       });
 
       test('should apply complex filter correctly', () async {
@@ -548,7 +607,7 @@ void main() {
         });
       });
 
-      test('should combine userId and complex filter correctly', () async {
+      test('should ignore userId and apply complex filter correctly', () async {
         // Arrange
         final productDocs = createProductDocs(1);
         setupMockFind(productDocs);
@@ -574,9 +633,52 @@ void main() {
             rawOptions: any(named: 'rawOptions'),
           ),
         ).captured;
+        // The filter should NOT contain the userId
         expect(captured.first, {
-          'userId': userId,
           'price': {r'$gte': 12.0},
+        });
+      });
+
+      test('should apply search query correctly', () async {
+        // Arrange
+        final searchableClient = DataMongodb<Product>(
+          connectionManager: mockConnectionManager,
+          modelName: modelName,
+          fromJson: Product.fromJson,
+          toJson: (product) => product.toJson(),
+          searchableFields: ['name'],
+        );
+        setupMockFind([]);
+        final filter = {'q': 'Gadget'};
+
+        // Act
+        await searchableClient.readAll(filter: filter);
+
+        // Assert
+        final captured = verify(
+          () => mockCollection.modernFind(
+            filter: captureAny(named: 'filter'),
+            sort: any(named: 'sort'),
+            limit: any(named: 'limit'),
+            skip: any(named: 'skip'),
+            projection: any(named: 'projection'),
+            hint: any(named: 'hint'),
+            hintDocument: any(named: 'hintDocument'),
+            findOptions: any(named: 'findOptions'),
+            rawOptions: any(named: 'rawOptions'),
+          ),
+        ).captured;
+        expect(captured.first, {
+          r'$and': [
+            {},
+            {
+              r'$or': [
+                {
+                  'name': {r'$regex': 'Gadget', r'$options': 'i'},
+                }
+              ],
+            }
+          ],
         });
       });
 
@@ -966,20 +1068,21 @@ void main() {
         expect(captured, filter);
       });
 
-      test('should apply userId correctly', () async {
+      test('should ignore userId and apply filter correctly', () async {
         // Arrange
         const userId = 'user-123';
-        when(() => mockCollection.count(any())).thenAnswer((_) async => 5);
+        final filter = {'price': 10.0};
+        when(() => mockCollection.count(any())).thenAnswer((_) async => 3);
 
         // Act
-        final response = await client.count(userId: userId);
+        final response = await client.count(userId: userId, filter: filter);
 
         // Assert
-        expect(response.data, 5);
-        final captured = verify(
-          () => mockCollection.count(captureAny()),
-        ).captured.first;
-        expect(captured, {'userId': userId});
+        expect(response.data, 3);
+        final captured =
+            verify(() => mockCollection.count(captureAny())).captured.first;
+        // The selector should NOT contain the userId
+        expect(captured, {'price': 10.0});
       });
 
       test('should throw ServerException on database error', () async {
@@ -1021,28 +1124,23 @@ void main() {
         expect(captured, pipeline);
       });
 
-      test(r'should prepend a $match stage when userId is provided', () async {
+      test('should ignore userId and execute a pipeline successfully',
+          () async {
         // Arrange
         const userId = 'user-123';
-        when(
-          () => mockCollection.aggregateToStream(any()),
-        ).thenAnswer((_) => Stream.fromIterable(results));
+        when(() => mockCollection.aggregateToStream(any()))
+            .thenAnswer((_) => Stream.fromIterable(results));
 
         // Act
         await client.aggregate(pipeline: pipeline, userId: userId);
 
         // Assert
-        final captured =
-            verify(
-                  () => mockCollection.aggregateToStream(captureAny()),
-                ).captured.first
-                as List<Map<String, Object>>;
+        final captured = verify(() => mockCollection.aggregateToStream(captureAny()))
+            .captured
+            .first as List<Map<String, Object>>;
 
-        expect(captured.length, 2);
-        expect(captured.first, {
-          r'$match': {'userId': userId},
-        });
-        expect(captured.last, pipeline.first);
+        // The pipeline should NOT be modified to include a userId match stage
+        expect(captured, pipeline);
       });
 
       test(
