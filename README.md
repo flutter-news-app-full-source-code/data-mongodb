@@ -1,40 +1,40 @@
-# ht_data_mongodb
+# data_mongodb
 
 ![coverage: 95%](https://img.shields.io/badge/coverage-95-green)
 [![style: very good analysis](https://img.shields.io/badge/style-very_good_analysis-B22C89.svg)](https://pub.dev/packages/very_good_analysis)
 [![License: PolyForm Free Trial](https://img.shields.io/badge/License-PolyForm%20Free%20Trial-blue)](https://polyformproject.org/licenses/free-trial/1.0.0)
 
-A production-ready MongoDB implementation of the `HtDataClient` interface, designed to connect Dart and Flutter applications to a MongoDB backend. This package is part of the Headlines Toolkit (HT) ecosystem.
+A production-ready MongoDB implementation of the `DataClient` interface, designed to connect Dart and Flutter applications to a MongoDB backend. This package is part of the [**Flutter News App - Full Source Code Toolkit**](https://github.com/flutter-news-app-full-source-code).
 
 ## Description
 
-`HtDataMongodb` provides a robust, concrete implementation of the `HtDataClient` interface using the `mongo_dart` package. It acts as the bridge between your application's repositories and a MongoDB database.
+`DataMongodb` provides a robust, concrete implementation of the `DataClient` interface using the `mongo_dart` package. It acts as the bridge between your application's repositories and a MongoDB database.
 
-It translates the abstract, high-level data requests from the `HtDataClient` interface—including rich filters, multi-field sorting, and cursor-based pagination—into native, efficient MongoDB queries.
+It translates the abstract, high-level data requests from the `DataClient` interface—including rich filters, multi-field sorting, and cursor-based pagination—into native, efficient MongoDB queries.
 
-A key feature of this implementation is its **ID management strategy**. It ensures that the application layer remains the source of truth for a document's ID by mapping the model's `id` string to the database's `_id` field. This is crucial for correctly handling both global documents (like headlines) and user-owned documents (like settings), where the document's `_id` must match the user's ID. For a deeper explanation, see the documentation within the `HtDataMongodb` class.
+A key feature of this implementation is its **ID management strategy**. It ensures that the application layer remains the source of truth for a document's ID by mapping the model's `id` string to the database's `_id` field. This is crucial for correctly handling both global documents (like headlines) and user-owned documents (like settings), where the document's `_id` must match the user's ID. For a deeper explanation, see the documentation within the `DataMongodb` class.
 
 ## Getting Started
 
 This package is intended to be used as a dependency in backend services (like a Dart Frog API) or applications that connect directly to MongoDB.
 
-To use this package, add `ht_data_mongodb` and its peer dependencies to your `pubspec.yaml`.
+To use this package, add `data_mongodb` and its peer dependencies to your `pubspec.yaml`.
 
 ```yaml
 dependencies:
-  # ht_data_client defines the interface this package implements.
-  ht_data_client:
+  # data_client defines the interface this package implements.
+  data_client:
     git:
-      url: https://github.com/headlines-toolkit/ht-data-client.git
+      url: https://github.com/flutter-news-app-full-source-code/data-client.git
       # ref: <specific_commit_or_tag>
-  # ht_shared is needed for models and exceptions.
-  ht_shared:
+  # core is needed for models and exceptions.
+  core:
     git:
-      url: https://github.com/headlines-toolkit/ht-shared.git
+      url: https://github.com/flutter-news-app-full-source-code/core.git
       # ref: <specific_commit_or_tag>
-  ht_data_mongodb:
+  data_mongodb:
     git:
-      url: https://github.com/headlines-toolkit/ht-data-mongodb.git
+      url: https://github.com/flutter-news-app-full-source-code/data-mongodb.git
       # ref: <specific_commit_or_tag>
 ```
 
@@ -42,24 +42,24 @@ Then run `dart pub get` or `flutter pub get`.
 
 ## Features
 
-- Implements the `HtDataClient<T>` interface from `package:ht_data_client`.
+- Implements the `DataClient<T>` interface from `package:data_client`.
 - Includes `MongoDbConnectionManager` for robust connection lifecycle management.
 - Translates `readAll` parameters (`filter`, `sort`, `pagination`) into native MongoDB queries.
 - **Handles ID Management**: Faithfully maps the application-level `id` string to the database `_id`, preserving data integrity for all document types.
 - **Supports Multiple Data Models**: Correctly handles both global documents (e.g., `Headline`) and user-owned documents (e.g., `UserAppSettings`) where the document `_id` serves as the foreign key to the user.
-- Throws standard exceptions from `package:ht_shared` for consistent error handling.
+- Throws standard exceptions from `package:core` for consistent error handling.
 - Implements `count` for efficient document counting.
 - Implements `aggregate` to execute powerful, server-side aggregation pipelines.
 - **Partial Text Search**: Translates a `q` filter parameter into a case-insensitive (`$regex`) across designated searchable fields.
 
 ## Usage
 
-Here's a basic example of how to use `HtDataMongodb` with a simple `Product` model.
+Here's a basic example of how to use `DataMongodb` with a simple `Product` model.
 
 ```dart
-import 'package:ht_data_client/ht_data_client.dart';
-import 'package:ht_data_mongodb/ht_data_mongodb.dart';
-import 'package:ht_shared/ht_shared.dart';
+import 'package:data_client/data_client.dart';
+import 'package:data_mongodb/data_mongodb.dart';
+import 'package:core/core.dart';
 
 // 1. Define your model.
 class Product {
@@ -89,7 +89,7 @@ void main() async {
     await connectionManager.init(connectionString);
 
     // 4. Instantiate the client for your model.
-    final client = HtDataMongodb<Product>(
+    final client = DataMongodb<Product>(
       connectionManager: connectionManager,
       modelName: 'products', // The name of the MongoDB collection.
       fromJson: Product.fromJson,
@@ -143,7 +143,7 @@ void main() async {
         'Average product price: \$${aggregateResponse.data.first['averagePrice']}',
       );
     }
-  } on HtHttpException catch (e) {
+  } on HttpException catch (e) {
     print('An error occurred: ${e.message}');
   } finally {
     // 6. Always close the connection.
@@ -152,6 +152,9 @@ void main() async {
 }
 ```
 
-## License
 
-This package is licensed under the [PolyForm Free Trial 1.0.0](/LICENSE). Please review the terms before use.
+## 🔑 Licensing
+
+This package is source-available and licensed under the [PolyForm Free Trial 1.0.0](LICENSE). Please review the terms before use.
+
+For commercial licensing options that grant the right to build and distribute unlimited applications, please visit the main [**Flutter News App - Full Source Code Toolkit**](https://github.com/flutter-news-app-full-source-code) organization.

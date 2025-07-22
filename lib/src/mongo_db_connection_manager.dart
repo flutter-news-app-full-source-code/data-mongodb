@@ -1,4 +1,4 @@
-import 'package:ht_shared/ht_shared.dart';
+import 'package:core/core.dart';
 import 'package:mongo_dart/mongo_dart.dart';
 
 /// Manages the connection to a MongoDB database.

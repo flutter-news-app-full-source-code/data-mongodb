@@ -1,8 +1,8 @@
 // ignore_for_file: inference_failure_on_function_invocation, use_raw_strings, avoid_redundant_argument_values
 
 import 'package:equatable/equatable.dart';
-import 'package:ht_data_mongodb/ht_data_mongodb.dart';
-import 'package:ht_shared/ht_shared.dart';
+import 'package:data_mongodb/data_mongodb.dart';
+import 'package:core/core.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:mongo_dart/mongo_dart.dart';
 import 'package:test/test.dart';
@@ -41,8 +41,8 @@ class MockDbCollection extends Mock implements DbCollection {}
 class MockWriteResult extends Mock implements WriteResult {}
 
 void main() {
-  group('HtDataMongodb', () {
-    late HtDataMongodb<Product> client;
+  group('DataMongodb', () {
+    late DataMongodb<Product> client;
     late MockMongoDbConnectionManager mockConnectionManager;
     late MockDb mockDb;
     late MockDbCollection mockCollection;
@@ -57,7 +57,7 @@ void main() {
       when(() => mockConnectionManager.db).thenReturn(mockDb);
       when(() => mockDb.collection(any())).thenReturn(mockCollection);
 
-      client = HtDataMongodb<Product>(
+      client = DataMongodb<Product>(
         connectionManager: mockConnectionManager,
         modelName: modelName,
         fromJson: Product.fromJson,
@@ -66,7 +66,7 @@ void main() {
     });
 
     test('can be instantiated', () {
-      expect(client, isA<HtDataMongodb<Product>>());
+      expect(client, isA<DataMongodb<Product>>());
     });
 
     group('create', () {
@@ -242,10 +242,7 @@ void main() {
         name: 'Updated Gadget',
         price: 129.99,
       );
-      final updatedProductDoc = {
-        'name': 'Updated Gadget',
-        'price': 129.99,
-      };
+      final updatedProductDoc = {'name': 'Updated Gadget', 'price': 129.99};
 
       test('should update an item successfully', () async {
         // Arrange
@@ -432,11 +429,7 @@ void main() {
       List<Map<String, dynamic>> createProductDocs(int count) {
         return List.generate(count, (i) {
           final id = ObjectId();
-          return {
-            '_id': id,
-            'name': 'Product $i',
-            'price': 10.0 + i,
-          };
+          return {'_id': id, 'name': 'Product $i', 'price': 10.0 + i};
         });
       }
 
@@ -936,10 +929,7 @@ void main() {
           ).thenThrow(Exception('DB connection failed'));
 
           // Act & Assert
-          expect(
-            () => client.readAll(),
-            throwsA(isA<ServerException>()),
-          );
+          expect(() => client.readAll(), throwsA(isA<ServerException>()));
         });
       });
     });

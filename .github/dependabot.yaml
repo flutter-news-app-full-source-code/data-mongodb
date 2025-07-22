@@ -10,4 +10,5 @@ updates:
     schedule:
       interval: "weekly"
     ignore:
-      - dependency-name: "ht_*"
+      - dependency-name: "data_client"
+      - dependency-name: "core"

@@ -1,14 +1,14 @@
-// ignore_for_file: cascade_invocations
+// ignore_for_file: cascade_invocations, public_member_api_docs
 
-import 'package:ht_data_client/ht_data_client.dart';
-import 'package:ht_data_mongodb/src/mongo_db_connection_manager.dart';
-import 'package:ht_shared/ht_shared.dart';
+import 'package:core/core.dart';
+import 'package:data_client/data_client.dart';
+import 'package:data_mongodb/src/mongo_db_connection_manager.dart';
 import 'package:logging/logging.dart';
 import 'package:mongo_dart/mongo_dart.dart';
 import 'package:uuid/uuid.dart';
 
-/// {@template ht_data_mongodb}
-/// A MongoDB implementation of the [HtDataClient] interface.
+/// {@template data_mongodb}
+/// A MongoDB implementation of the [DataClient] interface.
 ///
 /// This client interacts with a MongoDB database to perform CRUD operations,
 /// translating the generic data client requests into native MongoDB queries.
@@ -43,7 +43,7 @@ import 'package:uuid/uuid.dart';
 ///
 /// ### The `userId` Parameter: A Critical Clarification
 ///
-/// The [HtDataClient] interface, being generic, includes an optional `userId`
+/// The [DataClient] interface, being generic, includes an optional `userId`
 /// parameter on its methods (e.g., `create({required T item, String? userId})`).
 /// This is to support data schemas where documents might have a `userId` field.
 ///
@@ -61,20 +61,20 @@ import 'package:uuid/uuid.dart';
 /// is to faithfully execute the resulting database operation (e.g., "fetch the
 /// document with this `_id`").
 /// {@endtemplate}
-class HtDataMongodb<T> implements HtDataClient<T> {
-  /// {@macro ht_data_mongodb}
-  HtDataMongodb({
+class DataMongodb<T> implements DataClient<T> {
+  /// {@macro data_mongodb}
+  DataMongodb({
     required MongoDbConnectionManager connectionManager,
     required String modelName,
     required FromJson<T> fromJson,
     required ToJson<T> toJson,
     this.searchableFields,
     Logger? logger,
-  })  : _connectionManager = connectionManager,
-        _modelName = modelName,
-        _fromJson = fromJson,
-        _toJson = toJson,
-        _logger = logger ?? Logger('HtDataMongodb<$T>');
+  }) : _connectionManager = connectionManager,
+       _modelName = modelName,
+       _fromJson = fromJson,
+       _toJson = toJson,
+       _logger = logger ?? Logger('DataMongodb<$T>');
 
   final MongoDbConnectionManager _connectionManager;
   final List<String>? searchableFields;
@@ -117,7 +117,9 @@ class HtDataMongodb<T> implements HtDataClient<T> {
 
     if (id == null || id.isEmpty) {
       // This should not happen if models are validated correctly upstream.
-      throw const BadRequestException('Model is missing a required "id" field.');
+      throw const BadRequestException(
+        'Model is missing a required "id" field.',
+      );
     }
 
     // Ensure the ID is a valid hex string for ObjectId conversion.
@@ -174,7 +176,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
         processedFilter.clear();
         processedFilter[r'$and'] = [
           otherFilters,
-          {r'$or': searchConditions}
+          {r'$or': searchConditions},
         ];
       }
     } else if (processedFilter.containsKey('q')) {
@@ -296,11 +298,11 @@ class HtDataMongodb<T> implements HtDataClient<T> {
           'Failed to create item: ${writeResult.writeError?.errmsg}',
         );
       }
-      _logger..finer('insertOne successful for _id: ${doc['_id']}')
-
-      // Best Practice: After insertion, fetch the canonical document from the
-      // database to ensure the returned data is exactly what was stored.
-      ..finer('Fetching newly created document for verification...');
+      _logger
+        ..finer('insertOne successful for _id: ${doc['_id']}')
+        // Best Practice: After insertion, fetch the canonical document from the
+        // database to ensure the returned data is exactly what was stored.
+        ..finer('Fetching newly created document for verification...');
       final createdDoc = await _collection.findOne({'_id': doc['_id']});
       if (createdDoc == null) {
         _logger.severe(
@@ -320,7 +322,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
           timestamp: DateTime.now(),
         ),
       );
-    } on HtHttpException {
+    } on HttpException {
       rethrow;
     } on Exception catch (e, s) {
       _logger.severe('Error during create in $_modelName', e, s);
@@ -338,9 +340,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
         throw BadRequestException('Invalid ID format: "$id"');
       }
 
-      final selector = <String, dynamic>{
-        '_id': ObjectId.fromHexString(id),
-      };
+      final selector = <String, dynamic>{'_id': ObjectId.fromHexString(id)};
       _logger.finer('Using delete selector: $selector');
 
       final writeResult = await _collection.deleteOne(selector);
@@ -355,7 +355,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       }
       _logger.fine('Successfully deleted document with id: $id');
       // No return value on success
-    } on HtHttpException {
+    } on HttpException {
       rethrow;
     } on Exception catch (e, s) {
       _logger.severe('Error during delete in $_modelName', e, s);
@@ -377,9 +377,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
         throw BadRequestException('Invalid ID format: "$id"');
       }
 
-      final selector = <String, dynamic>{
-        '_id': ObjectId.fromHexString(id),
-      };
+      final selector = <String, dynamic>{'_id': ObjectId.fromHexString(id)};
       _logger.finer('Using read selector: $selector');
 
       final doc = await _collection.findOne(selector);
@@ -388,9 +386,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
         _logger.warning(
           'Read FAILED: Item with id "$id" not found in $_modelName.',
         );
-        throw NotFoundException(
-          'Item with ID "$id" not found in $_modelName.',
-        );
+        throw NotFoundException('Item with ID "$id" not found in $_modelName.');
       }
       _logger.fine('Successfully read document with id: $id');
 
@@ -402,7 +398,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
           timestamp: DateTime.now(),
         ),
       );
-    } on HtHttpException {
+    } on HttpException {
       rethrow;
     } on Exception catch (e, s) {
       _logger.severe('Error during read in $_modelName', e, s);
@@ -432,11 +428,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
 
       // Fetch one extra item to determine if there are more pages.
       final findResult = await _collection
-          .modernFind(
-            filter: selector,
-            sort: sortBuilder,
-            limit: limit + 1,
-          )
+          .modernFind(filter: selector, sort: sortBuilder, limit: limit + 1)
           .toList();
 
       final hasMore = findResult.length > limit;
@@ -466,7 +458,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
           timestamp: DateTime.now(),
         ),
       );
-    } on HtHttpException {
+    } on HttpException {
       rethrow;
     } on Exception catch (e, s) {
       _logger.severe('Error during readAll in $_modelName', e, s);
@@ -488,9 +480,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
         throw BadRequestException('Invalid ID format: "$id"');
       }
 
-      final selector = <String, dynamic>{
-        '_id': ObjectId.fromHexString(id),
-      };
+      final selector = <String, dynamic>{'_id': ObjectId.fromHexString(id)};
       _logger.finer('Using update selector: $selector');
 
       // Prepare the document for update. Note that the `_id` from the item
@@ -523,7 +513,7 @@ class HtDataMongodb<T> implements HtDataClient<T> {
           timestamp: DateTime.now(),
         ),
       );
-    } on HtHttpException {
+    } on HttpException {
       rethrow;
     } on Exception catch (e, s) {
       _logger.severe('Error during update in $_modelName', e, s);
@@ -575,8 +565,9 @@ class HtDataMongodb<T> implements HtDataClient<T> {
       // to a specific user-owned document) or other fields directly in the
       // provided pipeline by the caller.
 
-      final results =
-          await _collection.aggregateToStream(finalPipeline).toList();
+      final results = await _collection
+          .aggregateToStream(finalPipeline)
+          .toList();
 
       return SuccessApiResponse(
         data: results,
