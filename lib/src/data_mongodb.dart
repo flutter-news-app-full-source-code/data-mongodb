@@ -288,6 +288,9 @@ class DataMongodb<T> implements DataClient<T> {
       final doc = _prepareDocumentForInsertionOrUpdate(item);
       _logger.finer('Prepared document for insertion with _id: ${doc['_id']}');
 
+      // DIAGNOSTIC: Log the exact document before insertion.
+      _logger.info('Executing insertOne with document: $doc');
+
       final writeResult = await _collection.insertOne(doc);
 
       if (!writeResult.isSuccess) {
