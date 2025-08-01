@@ -84,6 +84,39 @@ class DataMongodb<T> implements DataClient<T> {
   final Logger _logger;
   final _uuid = const Uuid();
 
+  /// Transforms a data map before it's sent to the database.
+  ///
+  /// This method addresses a critical issue where the field name 'language'
+  /// conflicts with a reserved keyword in MongoDB's `text` search options.
+  /// To prevent this, it transparently renames any 'language' field to
+  /// 'modelLanguage' before the document is written.
+  Map<String, dynamic> _transformMapForDb(Map<String, dynamic> map) {
+    if (map.containsKey('language')) {
+      final newMap = Map<String, dynamic>.from(map);
+      final languageValue = newMap.remove('language');
+      newMap['modelLanguage'] = languageValue;
+      return newMap;
+    }
+    return map;
+  }
+
+  /// Transforms a data map after it's retrieved from the database.
+  ///
+  /// This is the counterpart to [_transformMapForDb]. It checks for the
+  /// 'modelLanguage' field (which was renamed for storage) and transforms it
+  /// back to the original 'language' field that the application's data models
+  /// expect. This ensures the database-level workaround is invisible to the
+  /// rest of the application.
+  Map<String, dynamic> _transformMapFromDb(Map<String, dynamic> map) {
+    if (map.containsKey('modelLanguage')) {
+      final newMap = Map<String, dynamic>.from(map);
+      final languageValue = newMap.remove('modelLanguage');
+      newMap['language'] = languageValue;
+      return newMap;
+    }
+    return map;
+  }
+
   /// A getter for the MongoDB collection for the given model type [T].
   DbCollection get _collection => _connectionManager.db.collection(_modelName);
 
@@ -96,7 +129,9 @@ class DataMongodb<T> implements DataClient<T> {
     // We create a copy to avoid modifying the original map.
     final newDoc = Map<String, dynamic>.from(doc);
     newDoc['id'] = (newDoc['_id'] as ObjectId).oid;
-    return _fromJson(newDoc);
+    // Apply the reverse transformation for the 'language' field.
+    final transformedDoc = _transformMapFromDb(newDoc);
+    return _fromJson(transformedDoc);
   }
 
   /// Prepares a model of type [T] for insertion or update in MongoDB.
@@ -285,7 +320,8 @@ class DataMongodb<T> implements DataClient<T> {
   }) async {
     _logger.fine('Attempting to create item in collection: $_modelName...');
     try {
-      final doc = _prepareDocumentForInsertionOrUpdate(item);
+      final preparedDoc = _prepareDocumentForInsertionOrUpdate(item);
+      final doc = _transformMapForDb(preparedDoc);
       _logger.finer('Prepared document for insertion with _id: ${doc['_id']}');
 
       // DIAGNOSTIC: Log the exact document before insertion.
@@ -488,10 +524,11 @@ class DataMongodb<T> implements DataClient<T> {
 
       // Prepare the document for update. This ensures the item's ID is
       // validated before proceeding.
-      final docToUpdate = _prepareDocumentForInsertionOrUpdate(item)
+      final preparedDoc = _prepareDocumentForInsertionOrUpdate(item)
         // The `_id` field must be removed from the update payload itself,
         // as it's illegal to modify the `_id` of an existing document.
         ..remove('_id');
+      final docToUpdate = _transformMapForDb(preparedDoc);
       _logger.finer('Update payload: $docToUpdate');
 
       // Use findAndModify for an atomic update and return operation.
@@ -575,8 +612,12 @@ class DataMongodb<T> implements DataClient<T> {
           .aggregateToStream(finalPipeline)
           .toList();
 
+      // Apply the reverse transformation for the 'language' field to each
+      // document in the result set.
+      final transformedResults = results.map(_transformMapFromDb).toList();
+
       return SuccessApiResponse(
-        data: results,
+        data: transformedResults,
         metadata: ResponseMetadata(
           requestId: _uuid.v4(),
           timestamp: DateTime.now(),
