@@ -90,6 +90,8 @@ class DataMongodb<T> implements DataClient<T> {
   /// conflicts with a reserved keyword in MongoDB's `text` search options.
   /// To prevent this, it transparently renames any 'language' field to
   /// 'modelLanguage' before the document is written.
+  /// 
+  /// https://www.mongodb.com/community/forums/t/just-to-point-out-do-not-name-a-field-language-if-you-are-planning-to-create-an-index/263793
   Map<String, dynamic> _transformMapForDb(Map<String, dynamic> map) {
     if (map.containsKey('language')) {
       final newMap = Map<String, dynamic>.from(map);
