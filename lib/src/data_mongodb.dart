@@ -173,6 +173,54 @@ class DataMongodb<T> implements DataClient<T> {
     return doc;
   }
 
+  /// Recursively processes a filter map to convert valid hex string IDs to
+  /// ObjectIds. This is crucial for querying against `_id` or nested `*.id`
+  /// fields.
+  dynamic _processFilterIds(dynamic filter) {
+    if (filter is Map<String, dynamic>) {
+      final newMap = <String, dynamic>{};
+      for (final entry in filter.entries) {
+        final key = entry.key;
+        final value = entry.value;
+
+        // If the key is `_id` or ends with `.id` and the value is a valid
+        // hex string, convert it to an ObjectId.
+        if ((key == '_id' || key.endsWith('.id')) &&
+            value is String &&
+            ObjectId.isValidHexId(value)) {
+          newMap[key] = ObjectId.fromHexString(value);
+        } else if ((key == '_id' || key.endsWith('.id')) &&
+            value is Map<String, dynamic> &&
+            value.containsKey(r'$in') &&
+            value[r'$in'] is List) {
+          // Handle `$in` clauses for ID fields.
+          final idList = value[r'$in'] as List;
+          newMap[key] = {
+            r'$in': idList
+                .whereType<String>()
+                .where(ObjectId.isValidHexId)
+                .map(ObjectId.fromHexString)
+                .toList(),
+          };
+        } else if (value is Map<String, dynamic>) {
+          // Recurse for nested maps (like in $or, $and).
+          newMap[key] = _processFilterIds(value);
+        } else if (value is List) {
+          // Recurse for lists (like in $or, $in).
+          newMap[key] = value.map(_processFilterIds).toList();
+        } else {
+          newMap[key] = value;
+        }
+      }
+      return newMap;
+    } else if (filter is List) {
+      // Also handle lists at the top level of the filter if necessary.
+      return filter.map(_processFilterIds).toList();
+    }
+    // Return other types as is.
+    return filter;
+  }
+
   /// Builds a MongoDB query selector from the provided filter.
   ///
   /// The [filter] map is expected to be in a format compatible with MongoDB's
@@ -187,7 +235,7 @@ class DataMongodb<T> implements DataClient<T> {
     }
 
     // Create a mutable copy to work with.
-    final processedFilter = Map<String, dynamic>.from(filter);
+    final processedFilter = _processFilterIds(filter) as Map<String, dynamic>;
 
     // Check for the special 'q' parameter for text search.
     if (processedFilter.containsKey('q') &&
@@ -202,20 +250,19 @@ class DataMongodb<T> implements DataClient<T> {
         });
       }
 
-      // If there's already an '$and' operator, add the '$or' to it.
-      // Otherwise, create a new '$and' that includes the '$or'.
-      if (processedFilter.containsKey(r'$and')) {
-        final existingAnd = processedFilter[r'$and'] as List;
-        existingAnd.add({r'$or': searchConditions});
-      } else {
-        // If there are other filters, they need to be combined with the search.
-        final otherFilters = Map<String, dynamic>.from(processedFilter);
-        processedFilter.clear();
-        processedFilter[r'$and'] = [
-          otherFilters,
-          {r'$or': searchConditions},
-        ];
-      }
+      // To correctly combine the text search with other existing filters,
+      // we use an '$and' operator.
+      final existingFilters = Map<String, dynamic>.from(processedFilter);
+
+      // The text search itself is an '$or' across multiple fields.
+      final textSearchCondition = {r'$or': searchConditions};
+
+      // Now, build the final '$and' condition.
+      processedFilter.clear();
+      processedFilter[r'$and'] = [
+        existingFilters,
+        textSearchCondition,
+      ];
     } else if (processedFilter.containsKey('q')) {
       // If 'q' is present but no searchable fields are configured,
       // remove it to prevent errors.
@@ -225,21 +272,8 @@ class DataMongodb<T> implements DataClient<T> {
       );
     }
 
-    // If there's only one filter condition after processing, return it directly.
-    if (processedFilter.length == 1) {
-      _logger.finer('Built MongoDB selector: $processedFilter');
-      return processedFilter;
-    }
-
-    // If there are multiple conditions, wrap them in an explicit $and operator.
-    final andConditions = processedFilter.entries
-        .map((entry) => {entry.key: entry.value})
-        .toList();
-
-    final selector = {r'$and': andConditions};
-
-    _logger.finer('Built MongoDB selector: $selector');
-    return selector;
+    _logger.finer('Built MongoDB selector: $processedFilter');
+    return processedFilter;
   }
 
   /// Builds a MongoDB sort map from the provided list of [SortOption].
