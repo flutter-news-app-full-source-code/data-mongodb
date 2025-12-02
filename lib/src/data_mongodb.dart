@@ -197,9 +197,15 @@ class DataMongodb<T> implements DataClient<T> {
           final idList = value[r'$in'] as List;
           newMap[key] = {
             r'$in': idList
-                .whereType<String>()
-                .where(ObjectId.isValidHexId)
-                .map(ObjectId.fromHexString)
+                .map((id) {
+                  if (id is String && ObjectId.isValidHexId(id)) {
+                    return ObjectId.fromHexString(id);
+                  }
+                  // Keep existing ObjectIds or other types.
+                  return id;
+                })
+                // Ensure only ObjectIds are in the final list for the query.
+                .whereType<ObjectId>()
                 .toList(),
           };
         } else if (value is Map<String, dynamic>) {

@@ -804,6 +804,42 @@ void main() {
         expect(inClause, contains(categoryId2));
       });
 
+      test(
+        'should apply filter with mixed string and ObjectId in an \$in clause',
+        () async {
+          // Arrange
+          final categoryId1 = ObjectId(); // Already an ObjectId
+          final categoryId2 = ObjectId(); // Will be a string
+          final filter = {
+            'category.id': {
+              r'$in': [categoryId1, categoryId2.oid, 'not-an-id'],
+            },
+          };
+          setupMockFind([]);
+
+          // Act
+          await client.readAll(filter: filter);
+
+          // Assert
+          final captured = verify(
+            () => mockCollection.modernFind(
+              filter: captureAny(named: 'filter'),
+              sort: any(named: 'sort'),
+              limit: any(named: 'limit'),
+              skip: any(named: 'skip'),
+            ),
+          ).captured;
+          final capturedFilter = captured.first as Map<String, dynamic>;
+          final inClause =
+              capturedFilter['category.id'][r'$in'] as List<ObjectId>;
+
+          // Verify that the existing ObjectId was preserved and the string was converted.
+          expect(inClause, hasLength(2));
+          expect(inClause, contains(categoryId1));
+          expect(inClause, contains(categoryId2));
+        },
+      );
+
       test('should apply filter with a single nested string ID', () async {
         // Arrange
         final categoryId = ObjectId();
@@ -841,9 +877,7 @@ void main() {
             {
               'name': {r'$regex': 'Gadget', r'$options': 'i'},
             },
-            {
-              '_id': productId.oid,
-            }, // Filter by string representation of ObjectId
+            {'_id': productId.oid}, // Filter by string representation of ObjectId
           ],
         };
 
