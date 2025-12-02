@@ -713,6 +713,207 @@ void main() {
         });
       });
 
+      test(
+        'should apply compound search query with other filters correctly',
+        () async {
+          // Arrange
+          final searchableClient = DataMongodb<Product>(
+            connectionManager: mockConnectionManager,
+            modelName: modelName,
+            fromJson: Product.fromJson,
+            toJson: (product) => product.toJson(),
+            searchableFields: ['name'],
+          );
+          setupMockFind([]);
+          final filter = {
+            'q': 'Gadget',
+            'price': {r'$gte': 100},
+          };
+
+          // Act
+          await searchableClient.readAll(filter: filter);
+
+          // Assert
+          final captured = verify(
+            () => mockCollection.modernFind(
+              filter: captureAny(named: 'filter'),
+              sort: any(named: 'sort'),
+              limit: any(named: 'limit'),
+              skip: any(named: 'skip'),
+              projection: any(named: 'projection'),
+              hint: any(named: 'hint'),
+              hintDocument: any(named: 'hintDocument'),
+              findOptions: any(named: 'findOptions'),
+              rawOptions: any(named: 'rawOptions'),
+            ),
+          ).captured;
+          final capturedFilter = captured.first as Map<String, dynamic>;
+
+          expect(capturedFilter, {
+            r'$and': [
+              {
+                'price': {r'$gte': 100},
+              },
+              {
+                r'$or': [
+                  {
+                    'name': {r'$regex': 'Gadget', r'$options': 'i'},
+                  },
+                ],
+              },
+            ],
+          });
+        },
+      );
+
+      test('should apply filter with string IDs in an \$in clause', () async {
+        // Arrange
+        final categoryId1 = ObjectId();
+        final categoryId2 = ObjectId();
+        final filter = {
+          'category.id': {
+            r'$in': [categoryId1.oid, categoryId2.oid, 'not-an-id'],
+          },
+        };
+        setupMockFind([]);
+
+        // Act
+        await client.readAll(filter: filter);
+
+        // Assert
+        final captured = verify(
+          () => mockCollection.modernFind(
+            filter: captureAny(named: 'filter'),
+            sort: any(named: 'sort'),
+            limit: any(named: 'limit'),
+            skip: any(named: 'skip'),
+            projection: any(named: 'projection'),
+            hint: any(named: 'hint'),
+            hintDocument: any(named: 'hintDocument'),
+            findOptions: any(named: 'findOptions'),
+            rawOptions: any(named: 'rawOptions'),
+          ),
+        ).captured;
+        final capturedFilter = captured.first as Map<String, dynamic>;
+        final inClause =
+            (capturedFilter['category.id'] as Map<String, dynamic>)[r'$in']
+                as List<ObjectId>;
+
+        // Verify that valid string IDs were converted and invalid ones were ignored.
+        expect(inClause, hasLength(2));
+        expect(inClause, contains(categoryId1));
+        expect(inClause, contains(categoryId2));
+      });
+
+      test(
+        'should apply filter with mixed string and ObjectId in an \$in clause',
+        () async {
+          // Arrange
+          final categoryId1 = ObjectId(); // Already an ObjectId
+          final categoryId2 = ObjectId(); // Will be a string
+          final filter = {
+            'category.id': {
+              r'$in': [categoryId1, categoryId2.oid, 'not-an-id'],
+            },
+          };
+          setupMockFind([]);
+
+          // Act
+          await client.readAll(filter: filter);
+
+          // Assert
+          final captured = verify(
+            () => mockCollection.modernFind(
+              filter: captureAny(named: 'filter'),
+              sort: any(named: 'sort'),
+              limit: any(named: 'limit'),
+              skip: any(named: 'skip'),
+            ),
+          ).captured;
+          final capturedFilter = captured.first as Map<String, dynamic>;
+          final inClause =
+              (capturedFilter['category.id'] as Map<String, dynamic>)[r'$in']
+                  as List<ObjectId>;
+
+          // Verify that the existing ObjectId was preserved and the string was converted.
+          expect(inClause, hasLength(2));
+          expect(inClause, contains(categoryId1));
+          expect(inClause, contains(categoryId2));
+        },
+      );
+
+      test('should apply filter with a single nested string ID', () async {
+        // Arrange
+        final categoryId = ObjectId();
+        final filter = {'category.id': categoryId.oid};
+        setupMockFind([]);
+
+        // Act
+        await client.readAll(filter: filter);
+
+        // Assert
+        final captured = verify(
+          () => mockCollection.modernFind(
+            filter: captureAny(named: 'filter'),
+            sort: any(named: 'sort'),
+            limit: any(named: 'limit'),
+            skip: any(named: 'skip'),
+            projection: any(named: 'projection'),
+            hint: any(named: 'hint'),
+            hintDocument: any(named: 'hintDocument'),
+            findOptions: any(named: 'findOptions'),
+            rawOptions: any(named: 'rawOptions'),
+          ),
+        ).captured;
+        final capturedFilter = captured.first as Map<String, dynamic>;
+
+        expect(capturedFilter['category.id'], isA<ObjectId>());
+        expect(capturedFilter['category.id'], categoryId);
+      });
+
+      test('should apply filter with string _id correctly', () async {
+        // Arrange
+        final productId = ObjectId();
+        final filter = {
+          r'$or': [
+            {
+              'name': {r'$regex': 'Gadget', r'$options': 'i'},
+            },
+            {
+              '_id': productId.oid,
+            }, // Filter by string representation of ObjectId
+          ],
+        };
+
+        setupMockFind([]); // We only care about the captured filter
+
+        // Act
+        await client.readAll(filter: filter);
+
+        // Assert
+        final captured = verify(
+          () => mockCollection.modernFind(
+            filter: captureAny(named: 'filter'),
+            sort: any(named: 'sort'),
+            limit: any(named: 'limit'),
+            skip: any(named: 'skip'),
+            projection: any(named: 'projection'),
+            hint: any(named: 'hint'),
+            hintDocument: any(named: 'hintDocument'),
+            findOptions: any(named: 'findOptions'),
+            rawOptions: any(named: 'rawOptions'),
+          ),
+        ).captured;
+
+        final capturedFilter = captured.first as Map<String, dynamic>;
+        final orConditions = capturedFilter[r'$or'] as List;
+        final idCondition = orConditions[1] as Map<String, dynamic>;
+
+        // Verify that the string ID was converted to an ObjectId
+        expect(idCondition['_id'], isA<ObjectId>());
+        expect(idCondition['_id'], productId);
+      });
+
       test('should apply a single sort option correctly', () async {
         // Arrange
         final productDocs = createProductDocs(2);
