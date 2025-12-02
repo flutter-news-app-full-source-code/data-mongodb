@@ -796,7 +796,8 @@ void main() {
         ).captured;
         final capturedFilter = captured.first as Map<String, dynamic>;
         final inClause =
-            capturedFilter['category.id'][r'$in'] as List<ObjectId>;
+            (capturedFilter['category.id'] as Map<String, dynamic>)[r'$in']
+                as List<ObjectId>;
 
         // Verify that valid string IDs were converted and invalid ones were ignored.
         expect(inClause, hasLength(2));
@@ -831,7 +832,8 @@ void main() {
           ).captured;
           final capturedFilter = captured.first as Map<String, dynamic>;
           final inClause =
-              capturedFilter['category.id'][r'$in'] as List<ObjectId>;
+              (capturedFilter['category.id'] as Map<String, dynamic>)[r'$in']
+                  as List<ObjectId>;
 
           // Verify that the existing ObjectId was preserved and the string was converted.
           expect(inClause, hasLength(2));
@@ -877,7 +879,9 @@ void main() {
             {
               'name': {r'$regex': 'Gadget', r'$options': 'i'},
             },
-            {'_id': productId.oid}, // Filter by string representation of ObjectId
+            {
+              '_id': productId.oid,
+            }, // Filter by string representation of ObjectId
           ],
         };
 
