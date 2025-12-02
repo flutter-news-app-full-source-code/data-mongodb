@@ -5,7 +5,7 @@
 </div>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/coverage-89%25-green?style=for-the-badge" alt="coverage">
+  <img src="https://img.shields.io/badge/coverage-91%25-green?style=for-the-badge" alt="coverage">
   <a href="https://flutter-news-app-full-source-code.github.io/docs/"><img src="https://img.shields.io/badge/LIVE_DOCS-VIEW-slategray?style=for-the-badge" alt="Live Docs: View"></a>
   <a href="https://github.com/flutter-news-app-full-source-code"><img src="https://img.shields.io/badge/MAIN_PROJECT-BROWSE-purple?style=for-the-badge" alt="Main Project: Browse"></a>
 </p>
@@ -26,6 +26,7 @@ This package offers a comprehensive set of features for interacting with MongoDB
 ### 🌐 Advanced Querying & Data Management
 - **Native MongoDB Queries:** Translates `readAll` parameters (rich `filter`, multi-field `sort`, and cursor-based `pagination`) into efficient native MongoDB queries.
 - **ID Management Strategy:** Faithfully maps the application-level `id` string to the database `_id` field, crucial for correctly handling both global documents (like headlines) and user-owned documents (like settings).
+- **Automatic ID Conversion:** Intelligently converts string representations of IDs in filters (including `_id`, nested `*.id` fields, and `$in` clauses) to MongoDB `ObjectId`s, simplifying queries against related documents.
 - **Support for Multiple Data Models:** Correctly handles various document types, including global entities and user-owned documents where the `_id` serves as a foreign key to the user.
 - **Efficient Counting & Aggregation:** Implements `count` for efficient document counting and `aggregate` to execute powerful, server-side aggregation pipelines.
 - **Partial Text Search:** Translates a `q` filter parameter into a case-insensitive (`$regex`) search across designated searchable fields.
